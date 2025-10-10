@@ -1,12 +1,12 @@
 import { Elysia, t } from 'elysia'
 import { applicationService } from '../services/application.service'
+import { authenticated } from '../middleware/auth'
 
 export const applicationRoutes = new Elysia({ prefix: '/applications' })
+  .use(authenticated)
   .post('/', async ({ user, body }) => {
-    if (!user) throw new Error('Unauthorized')
-    return await applicationService.createApplication(user.userId, body)
+    return await applicationService.createApplication(user!.userId, body)
   }, {
-    as: 'authenticated',
     body: t.Object({
       jobId: t.String(),
       customCvId: t.Optional(t.String()),
@@ -15,14 +15,12 @@ export const applicationRoutes = new Elysia({ prefix: '/applications' })
     })
   })
   .get('/', async ({ user, query }) => {
-    if (!user) throw new Error('Unauthorized')
-    return await applicationService.getUserApplications(user.userId, {
+    return await applicationService.getUserApplications(user!.userId, {
       status: query.status,
       limit: query.limit ? Number(query.limit) : undefined,
       offset: query.offset ? Number(query.offset) : undefined
     })
   }, {
-    as: 'authenticated',
     query: t.Object({
       status: t.Optional(t.String()),
       limit: t.Optional(t.String()),
@@ -30,21 +28,17 @@ export const applicationRoutes = new Elysia({ prefix: '/applications' })
     })
   })
   .get('/:id', async ({ user, params }) => {
-    if (!user) throw new Error('Unauthorized')
-    const application = await applicationService.getApplication(user.userId, params.id)
+    const application = await applicationService.getApplication(user!.userId, params.id)
     if (!application) throw new Error('Application not found')
     return application
   }, {
-    as: 'authenticated',
     params: t.Object({ id: t.String() })
   })
   .put('/:id', async ({ user, params, body }) => {
-    if (!user) throw new Error('Unauthorized')
-    const application = await applicationService.updateApplication(user.userId, params.id, body)
+    const application = await applicationService.updateApplication(user!.userId, params.id, body)
     if (!application) throw new Error('Application not found')
     return application
   }, {
-    as: 'authenticated',
     params: t.Object({ id: t.String() }),
     body: t.Object({
       status: t.Optional(t.String()),
@@ -56,20 +50,16 @@ export const applicationRoutes = new Elysia({ prefix: '/applications' })
     })
   })
   .delete('/:id', async ({ user, params }) => {
-    if (!user) throw new Error('Unauthorized')
-    const success = await applicationService.deleteApplication(user.userId, params.id)
+    const success = await applicationService.deleteApplication(user!.userId, params.id)
     if (!success) throw new Error('Application not found')
     return { success: true }
   }, {
-    as: 'authenticated',
     params: t.Object({ id: t.String() })
   })
   .post('/:id/submit', async ({ user, params }) => {
-    if (!user) throw new Error('Unauthorized')
-    const application = await applicationService.submitApplication(user.userId, params.id)
+    const application = await applicationService.submitApplication(user!.userId, params.id)
     if (!application) throw new Error('Application not found')
     return application
   }, {
-    as: 'authenticated',
     params: t.Object({ id: t.String() })
   })

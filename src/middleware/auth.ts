@@ -17,13 +17,12 @@ export const authMiddleware = new Elysia()
 
     return { user: payload }
   })
-  .guard({
-    beforeHandle: ({ user, set }) => {
-      if (!user) {
-        set.status = 401
-        return { error: 'Unauthorized' }
-      }
+
+export const authenticated = new Elysia()
+  .use(authMiddleware)
+  .onBeforeHandle(({ user, set }) => {
+    if (!user) {
+      set.status = 401
+      return { error: 'Unauthorized' }
     }
-  }, {
-    as: 'authenticated'
   })

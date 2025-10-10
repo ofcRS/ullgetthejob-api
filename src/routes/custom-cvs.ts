@@ -1,9 +1,10 @@
 import { Elysia, t } from 'elysia'
 import { customCvService } from '../services/custom-cv.service'
+import { authenticated } from '../middleware/auth'
 
 export const customCvRoutes = new Elysia({ prefix: '/custom-cvs' })
+  .use(authenticated)
   .post('/', async ({ user, body }) => {
-    if (!user) throw new Error('Unauthorized')
     return await customCvService.createCustomCV(body.cvId, {
       jobId: body.jobId,
       jobTitle: body.jobTitle,
@@ -12,7 +13,6 @@ export const customCvRoutes = new Elysia({ prefix: '/custom-cvs' })
       aiSuggestions: body.aiSuggestions
     })
   }, {
-    as: 'authenticated',
     body: t.Object({
       cvId: t.String(),
       jobId: t.Optional(t.String()),
@@ -23,25 +23,20 @@ export const customCvRoutes = new Elysia({ prefix: '/custom-cvs' })
     })
   })
   .get('/', async ({ user }) => {
-    if (!user) throw new Error('Unauthorized')
-    return await customCvService.getCustomCVsByUser(user.userId)
-  }, { as: 'authenticated' })
+    return await customCvService.getCustomCVsByUser(user!.userId)
+  })
   .get('/:id', async ({ user, params }) => {
-    if (!user) throw new Error('Unauthorized')
-    const customCv = await customCvService.getCustomCV(user.userId, params.id)
+    const customCv = await customCvService.getCustomCV(user!.userId, params.id)
     if (!customCv) throw new Error('Custom CV not found')
     return customCv
   }, {
-    as: 'authenticated',
     params: t.Object({ id: t.String() })
   })
   .put('/:id', async ({ user, params, body }) => {
-    if (!user) throw new Error('Unauthorized')
-    const customCv = await customCvService.updateCustomCV(user.userId, params.id, body)
+    const customCv = await customCvService.updateCustomCV(user!.userId, params.id, body)
     if (!customCv) throw new Error('Custom CV not found')
     return customCv
   }, {
-    as: 'authenticated',
     params: t.Object({ id: t.String() }),
     body: t.Object({
       jobId: t.Optional(t.String()),
@@ -52,20 +47,16 @@ export const customCvRoutes = new Elysia({ prefix: '/custom-cvs' })
     })
   })
   .delete('/:id', async ({ user, params }) => {
-    if (!user) throw new Error('Unauthorized')
-    const success = await customCvService.deleteCustomCV(user.userId, params.id)
+    const success = await customCvService.deleteCustomCV(user!.userId, params.id)
     if (!success) throw new Error('Custom CV not found')
     return { success: true }
   }, {
-    as: 'authenticated',
     params: t.Object({ id: t.String() })
   })
   .post('/:id/analyze', async ({ user, params }) => {
-    if (!user) throw new Error('Unauthorized')
-    const customCv = await customCvService.analyzeWithAI(user.userId, params.id)
+    const customCv = await customCvService.analyzeWithAI(user!.userId, params.id)
     if (!customCv) throw new Error('Custom CV not found')
     return customCv
   }, {
-    as: 'authenticated',
     params: t.Object({ id: t.String() })
   })

@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, boolean, jsonb } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, varchar, text, timestamp, boolean, jsonb, integer } from 'drizzle-orm/pg-core'
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -61,6 +61,23 @@ export const applications = pgTable('applications', {
   errorMessage: text('error_message'),
   hhResumeId: varchar('hh_resume_id', { length: 255 }),
   hhNegotiationId: varchar('hh_negotiation_id', { length: 255 }),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow()
+})
+
+export const applicationQueue = pgTable('application_queue', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workflowId: uuid('workflow_id').notNull(),
+  userId: uuid('user_id').references(() => users.id).notNull(),
+  cvId: uuid('cv_id').references(() => cvs.id).notNull(),
+  jobId: uuid('job_id').references(() => jobs.id),
+  jobExternalId: varchar('job_external_id', { length: 255 }).notNull(),
+  status: varchar('status', { length: 50 }).default('pending'),
+  payload: jsonb('payload'),
+  attempts: integer('attempts').default(0),
+  nextRunAt: timestamp('next_run_at').defaultNow(),
+  priority: integer('priority').default(0),
+  lastError: text('last_error'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow()
 })
