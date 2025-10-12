@@ -4,6 +4,7 @@ import { applicationQueue, applications } from '../db/schema'
 import { cvService } from '../services/cv.service'
 import { aiService } from '../services/ai.service'
 import { hhService } from '../services/hh.service'
+import { env } from '../config/env'
 
 // Rate limiting configuration (HH.ru limits: ~200 applications/day)
 const RATE_LIMITS = {
@@ -113,20 +114,13 @@ export class QueueWorker {
       payload.company
     )
 
-    // Check if we need to create/publish resume on HH.ru
-    let resumeId = payload.resumeId
-    if (!resumeId) {
-      const resume = await hhService.createResume(customizedCV)
-      resumeId = resume.id
-      await hhService.publishResume(resumeId)
-    }
-
-    // Submit application
-    const applicationResult = await hhService.submitApplication(
+    // Submit application via Phoenix Core orchestrator
+    const applicationResult = await hhService.submitApplicationViaCore({
+      userId,
       jobExternalId,
-      resumeId,
+      customizedCv: customizedCV,
       coverLetter
-    )
+    })
 
     // Record successful application
     await db.insert(applications).values({
@@ -136,8 +130,8 @@ export class QueueWorker {
       status: 'submitted',
       submittedAt: new Date(),
       responseData: applicationResult,
-      hhResumeId: resumeId,
-      hhNegotiationId: applicationResult.negotiationId,
+      hhResumeId: applicationResult.resume_id,
+      hhNegotiationId: applicationResult.negotiation_id,
       customCvId: cvId
     })
 

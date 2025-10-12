@@ -1,7 +1,7 @@
 # 🚀 UllGetTheJob API
 
-> **Blazingly fast Bun + Elysia REST API** ⚡  
-> High-performance API service for job application management with document parsing & JWT auth!
+> **Blazingly fast Bun + Elysia BFF (Backend For Frontend)** ⚡  
+> REST API service that proxies to Phoenix Core for HH.ru operations
 
 ---
 
@@ -11,7 +11,7 @@
 
 - 📄 **Document parsing** (PDF, DOCX) for resume processing
 - 🔐 **JWT authentication** with secure token management
-- 🗄️ **PostgreSQL database** with Drizzle ORM
+- 🗄️ **PostgreSQL database** (schema managed by Phoenix Core)
 - 🎯 **Type-safe** with TypeScript & Zod validation
 - ⚡ **Blazingly fast** powered by Bun runtime
 - 🌐 **CORS-enabled** for seamless frontend integration
@@ -23,7 +23,7 @@
 - **Bun** - Ultra-fast JavaScript runtime
 - **Elysia** - Ergonomic web framework with end-to-end type safety
 - **TypeScript** - Type-safe development
-- **Drizzle ORM** - Lightweight & performant ORM
+- **Drizzle ORM** - Lightweight ORM (introspection only; no migrations here)
 - **PostgreSQL** - Robust relational database
 - **Zod** - Schema validation
 - **JWT** - Secure authentication
@@ -49,12 +49,6 @@ pnpm install
 # or
 bun install
 
-# Generate database schema
-bun run db:generate
-
-# Run migrations
-bun run db:migrate
-
 # Start development server (hot reload)
 bun run dev
 
@@ -73,11 +67,8 @@ bun run dev
 # Production start
 bun run start
 
-# Generate Drizzle schema
-bun run db:generate
-
-# Run database migrations
-bun run db:migrate
+# Introspect DB (if needed for types)
+bun run db:introspect
 
 # Install dependencies
 pnpm install
@@ -120,20 +111,18 @@ src/
 Create a `.env` file with:
 
 ```env
-DATABASE_URL=postgresql://user:password@localhost:5432/ullgetthejob
-JWT_SECRET=your-secret-key
-PORT=3000
+DATABASE_URL=postgresql://postgres:1@localhost:5432/ullget
+CORE_URL=http://localhost:4000
+ORCHESTRATOR_SECRET=shared_secret_between_core_and_api
+JWT_SECRET=your_jwt_secret
+OPENROUTER_API_KEY=your_openrouter_key
 ```
 
-### Database Management
+### Important Notes
 
-```bash
-# Generate migration files
-bun run db:generate
+⚠️ Do NOT run Drizzle migrations. Phoenix Core manages the database schema.
 
-# Apply migrations
-bun run db:migrate
-```
+⚠️ Do NOT integrate with HH.ru directly. Use Phoenix Core API endpoints.
 
 ---
 

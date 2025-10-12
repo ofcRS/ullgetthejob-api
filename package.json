@@ -6,15 +6,14 @@
   "scripts": {
     "dev": "bun --hot src/index.ts",
     "start": "bun src/index.ts",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:introspect": "drizzle-kit introspect",
     "install-deps": "pnpm install"
   },
   "dependencies": {
     "@elysiajs/cors": "^1.0.3",
     "@elysiajs/jwt": "^1.0.5",
     "bcrypt": "^5.1.1",
-    "drizzle-orm": "^0.33.0",
+    "drizzle-orm": "^0.44.6",
     "elysia": "^1.0.26",
     "jsonwebtoken": "^9.0.2",
     "mammoth": "^1.6.0",
@@ -24,8 +23,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.5.0",
-    "drizzle-kit": "^0.25.0",
+    "drizzle-kit": "^0.31.5",
     "typescript": "^5.5.4"
-  }
+  },
+  "packageManager": "pnpm@10.18.2+sha512.9fb969fa749b3ade6035e0f109f0b8a60b5d08a1a87fdf72e337da90dcc93336e2280ca4e44f2358a649b83c17959e9993e777c2080879f3801e6f0d999ad3dd"
 }
-

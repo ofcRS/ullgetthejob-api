@@ -6,7 +6,6 @@ import { cvRoutes } from './routes/cvs'
 import { jobRoutes } from './routes/jobs'
 import { applicationRoutes } from './routes/applications'
 import { customCvRoutes } from './routes/custom-cvs'
-import { hhRoutes } from './routes/hh'
 import { workflowRoutes } from './routes/workflow'
 
 type Job = Record<string, unknown>
@@ -31,7 +30,6 @@ export const app = new Elysia()
   .use(jobRoutes)
   .use(applicationRoutes)
   .use(customCvRoutes)
-  .use(hhRoutes)
   .use(workflowRoutes)
   .get('/api/v1/system/health', () => ({ status: 'ok' }))
   .ws('/ws', {

@@ -4,12 +4,13 @@ import { db } from '../db/client'
 import { applicationQueue, applications } from '../db/schema'
 import { cvService } from '../services/cv.service'
 import { aiService } from '../services/ai.service'
-import { hhService } from '../services/hh.service'
+import { env } from '../config/env'
 import { authenticated } from '../middleware/auth'
 
 export const workflowRoutes = new Elysia({ prefix: '/workflow' })
   .use(authenticated)
-  .post('/start', async ({ user, body }) => {
+  .post('/start', async (ctx: any) => {
+    const { user, body } = ctx
     const { cvId, searchParams, maxApplications = 50 } = body
 
     // 1. Get user's CV
@@ -28,11 +29,11 @@ export const workflowRoutes = new Elysia({ prefix: '/workflow' })
     const workflowId = crypto.randomUUID()
 
     // 3. Fetch matching jobs from Core orchestrator
-    const jobsResponse = await fetch(`${process.env.VITE_ORCHESTRATOR_URL || 'http://localhost:4000'}/api/jobs/search`, {
+    const jobsResponse = await fetch(`${env.CORE_URL}/api/jobs/search`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Core-Secret': process.env.ORCHESTRATOR_SECRET || 'dev_orchestrator_secret'
+        'X-Core-Secret': env.ORCHESTRATOR_SECRET
       },
       body: JSON.stringify(searchParams)
     })
@@ -52,7 +53,7 @@ export const workflowRoutes = new Elysia({ prefix: '/workflow' })
         userId: user!.userId,
         cvId,
         jobId: job.id,
-        jobExternalId: job.id,
+        jobExternalId: job.external_id || job.id,
         status: 'pending',
         payload: {
           jobDescription: job.description,
@@ -76,16 +77,17 @@ export const workflowRoutes = new Elysia({ prefix: '/workflow' })
       cvId: t.String(),
       searchParams: t.Object({
         text: t.String(),
-        area: t.String(),
-        experience: t.String(),
-        employment: t.String(),
-        schedule: t.String()
+        area: t.Optional(t.String()),
+        experience: t.Optional(t.String()),
+        employment: t.Optional(t.String()),
+        schedule: t.Optional(t.String())
       }),
-      maxApplications: t.Number({ default: 50 })
+      maxApplications: t.Optional(t.Number({ default: 50 }))
     })
   })
 
-  .get('/status/:workflowId', async ({ user, params }) => {
+  .get('/status/:workflowId', async (ctx: any) => {
+    const { user, params } = ctx
     const workflowId = params.workflowId
 
     // Get stats from applications table
@@ -124,7 +126,8 @@ export const workflowRoutes = new Elysia({ prefix: '/workflow' })
     params: t.Object({ workflowId: t.String() })
   })
 
-  .post('/stop/:workflowId', async ({ user, params }) => {
+  .post('/stop/:workflowId', async (ctx: any) => {
+    const { user, params } = ctx
     const workflowId = params.workflowId
 
     // Mark all pending items in queue as cancelled
