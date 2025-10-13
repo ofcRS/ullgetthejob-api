@@ -1,268 +1,180 @@
-import { PDFParse } from "pdf-parse";
-import mammoth from "mammoth";
+import { env } from "../config/env";
 
 export interface ParsedCV {
+  firstName?: string;
+  lastName?: string;
   email?: string;
   phone?: string;
-  fullText: string;
+  title?: string;
+  summary?: string;
   experience?: string;
   education?: string;
   skills?: string[];
   projects?: string;
+  fullText: string;
 }
 
 export class CVParserService {
+  private openRouterKey = env.OPENROUTER_API_KEY;
+  private baseURL = "https://openrouter.ai/api/v1/chat/completions";
+
   async parseCV(file: File): Promise<ParsedCV> {
+    // Step 1: Extract raw text from file
+    const rawText = await this.extractRawText(file);
+
+    // Step 2: Send to AI for structured extraction
+    const structured = await this.extractStructureWithAI(rawText);
+
+    return structured;
+  }
+
+  private async extractRawText(file: File): Promise<string> {
     const buffer = await file.arrayBuffer();
 
     if (file.type === "application/pdf") {
-      return this.parsePDF(buffer);
-    } else if (
-      file.type.includes("word") ||
-      file.name.endsWith(".docx") ||
-      file.name.endsWith(".doc")
-    ) {
-      return this.parseDOCX(buffer);
+      return await this.extractPDFText(buffer);
+    } else if (file.type.includes("word") || file.name.match(/\.docx?$/i)) {
+      return await this.extractDOCXText(buffer);
     } else {
-      throw new Error(
-        "Unsupported file type. Please upload PDF or Word document."
-      );
+      throw new Error("Unsupported file type");
     }
   }
 
-  private async parsePDF(buffer: ArrayBuffer): Promise<ParsedCV> {
+  private async extractPDFText(buffer: ArrayBuffer): Promise<string> {
+    const { PDFParse } = await import("pdf-parse");
+    const parser = new PDFParse({data: buffer});
+    const data = await parser.getText();
+    return data.text;
+  }
+
+  private async extractDOCXText(buffer: ArrayBuffer): Promise<string> {
+    // Using mammoth
+    const mammoth = await import("mammoth");
+    const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
+    return result.value;
+  }
+
+  private async extractStructureWithAI(rawText: string): Promise<ParsedCV> {
+    const prompt = `
+You are a CV/Resume parser. Extract structured information from the following CV text.
+
+Return ONLY valid JSON (no markdown, no explanation) with this exact structure:
+{
+  "firstName": "string or null",
+  "lastName": "string or null", 
+  "email": "string or null",
+  "phone": "string or null",
+  "title": "string (job title/position) or null",
+  "summary": "string (brief professional summary) or null",
+  "experience": "string (work experience, detailed) or null",
+  "education": "string (education background) or null",
+  "skills": ["array", "of", "skills"] or [],
+  "projects": "string (notable projects) or null"
+}
+
+CV Text:
+${rawText}
+
+Extract all available information. If something is missing, use null or empty array.
+`;
+
     try {
-      const input = new Uint8Array(buffer);
-      const parser = new PDFParse({ data: buffer });
-      const textResult = await parser.getText();
-      return this.extractStructuredData(textResult.text);
+      const response = await fetch(this.baseURL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.openRouterKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://ullgetthejob.com",
+          "X-Title": "UllGetTheJob CV Parser",
+        },
+        body: JSON.stringify({
+          model: "anthropic/claude-3.5-sonnet",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.1,
+          max_tokens: 2000,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`OpenRouter error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content;
+
+      if (!content) {
+        throw new Error("No response from AI");
+      }
+
+      // Parse JSON from response
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        console.error("Invalid AI response:", content);
+        throw new Error("AI returned invalid format");
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      return {
+        ...parsed,
+        fullText: rawText,
+      };
     } catch (error) {
-      console.error("PDF parsing failed:", error);
-      throw new Error("Failed to parse PDF file");
+      console.error("AI parsing failed:", error);
+      // Fallback to basic extraction
+      return this.basicExtraction(rawText);
     }
   }
 
-  private async parseDOCX(buffer: ArrayBuffer): Promise<ParsedCV> {
-    try {
-      const result = await mammoth.extractRawText({ buffer });
-      return this.extractStructuredData(result.value);
-    } catch (error) {
-      console.error("DOCX parsing failed:", error);
-      throw new Error("Failed to parse Word document");
-    }
-  }
-
-  private extractStructuredData(text: string): ParsedCV {
-    // Normalize text - remove extra whitespace and normalize line endings
-    const normalizedText = text
-      .replace(/\r\n/g, "\n")
-      .replace(/\r/g, "\n")
-      .replace(/\n\s+/g, "\n")
-      .trim();
-
+  private basicExtraction(text: string): ParsedCV {
     return {
-      email: this.extractEmail(normalizedText),
-      phone: this.extractPhone(normalizedText),
-      fullText: normalizedText,
-      experience: this.extractSection(normalizedText, [
-        "experience",
-        "work history",
-        "employment",
-        "professional experience",
-      ]),
-      education: this.extractSection(normalizedText, [
-        "education",
-        "academic",
-        "qualification",
-        "degree",
-      ]),
-      skills: this.extractSkills(normalizedText),
-      projects: this.extractSection(normalizedText, [
-        "projects",
-        "portfolio",
-        "personal projects",
-      ]),
+      email: this.extractEmail(text),
+      phone: this.extractPhone(text),
+      skills: this.extractBasicSkills(text),
+      fullText: text,
     };
   }
 
   private extractEmail(text: string): string | undefined {
-    const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
-    return text.match(emailRegex)?.[0];
+    const match = text.match(
+      /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/
+    );
+    return match?.[0];
   }
 
   private extractPhone(text: string): string | undefined {
-    // Match various phone formats: +7 (999) 123-45-67, 8-999-123-45-67, +7 999 123 45 67, etc.
-    const phoneRegex =
-      /(?:\+?7|8)[\s\-\(\)]*(\d{3})[\s\-\)]*(\d{3})[\s\-]*(\d{2})[\s\-]*(\d{2})/;
-    const match = text.match(phoneRegex);
+    const match = text.match(
+      /(?:\+?7|8)[\s\-\(\)]*(\d{3})[\s\-\)]*(\d{3})[\s\-]*(\d{2})[\s\-]*(\d{2})/
+    );
     if (match) {
       return `+7 ${match[1]} ${match[2]}-${match[3]}-${match[4]}`;
     }
     return undefined;
   }
 
-  private extractSection(text: string, keywords: string[]): string {
-    // Convert text to lowercase for case-insensitive matching
-    const lowerText = text.toLowerCase();
-
-    // Find the start position of the section
-    let startPos = -1;
-    let earliestPos = text.length;
-
-    for (const keyword of keywords) {
-      const pos = lowerText.indexOf(keyword);
-      if (pos !== -1 && pos < earliestPos) {
-        earliestPos = pos;
-      }
-    }
-
-    if (earliestPos === text.length) {
-      return "";
-    }
-
-    startPos = earliestPos;
-
-    // Find the end of the section (next major section or end of text)
-    const sectionKeywords = [
-      "experience",
-      "education",
-      "skills",
-      "projects",
-      "contact",
-      "references",
-    ];
-    let endPos = text.length;
-
-    for (const keyword of sectionKeywords) {
-      const pos = lowerText.indexOf(keyword, startPos + 1);
-      if (pos !== -1 && pos < endPos) {
-        endPos = pos;
-      }
-    }
-
-    // Extract the section text
-    let sectionText = text.substring(startPos, endPos).trim();
-
-    // Clean up the section text
-    sectionText = sectionText
-      .replace(new RegExp(`^(${keywords.join("|")})\\s*:?\\s*`, "i"), "") // Remove section header
-      .trim();
-
-    return sectionText;
-  }
-
-  private extractSkills(text: string): string[] {
-    // Look for skills section
-    const skillsSection = this.extractSection(text, [
-      "skills",
-      "technologies",
-      "tools",
-      "competencies",
-    ]);
-
-    if (!skillsSection) {
-      return [];
-    }
-
-    // Extract skills from the section
-    const skillPatterns = [
-      // Comma or semicolon separated
-      /(?:^|[\n;])\s*([^,\n;]+)(?:,|$)/g,
-      // Bullet points
-      /(?:^|\n)\s*[•\-\*\•]\s*([^\n]+)/g,
-      // Skills in parentheses or brackets
-      /(?:\(|（)([^）\)]+)(?:\)|）)/g,
-    ];
-
-    const skills: string[] = [];
-
-    for (const pattern of skillPatterns) {
-      let match;
-      while ((match = pattern.exec(skillsSection)) !== null) {
-        const skill = match[1].trim();
-        if (skill.length > 2 && skill.length < 50) {
-          // Filter reasonable skill names
-          skills.push(skill);
-        }
-      }
-    }
-
-    // Also look for common tech skills in the entire text
-    const commonTechSkills = [
+  private extractBasicSkills(text: string): string[] {
+    const commonSkills = [
       "JavaScript",
       "TypeScript",
       "Python",
       "Java",
       "C#",
-      "C++",
-      "PHP",
-      "Ruby",
-      "Go",
-      "Rust",
       "React",
+      "Node.js",
       "Angular",
       "Vue",
-      "Node.js",
-      "Express",
-      "Django",
-      "Flask",
-      "Spring",
-      "Laravel",
       "PostgreSQL",
-      "MySQL",
       "MongoDB",
-      "Redis",
       "Docker",
       "Kubernetes",
       "AWS",
-      "Azure",
-      "GCP",
+      "Git",
       "HTML",
       "CSS",
-      "Sass",
-      "Less",
-      "Git",
-      "Linux",
-      "Windows",
-      "macOS",
     ];
-
-    const foundSkills = commonTechSkills.filter((skill) =>
+    return commonSkills.filter((skill) =>
       text.toLowerCase().includes(skill.toLowerCase())
     );
-
-    // Combine and deduplicate
-    const allSkills = [...new Set([...skills, ...foundSkills])]
-      .filter((skill) => skill.length > 0)
-      .slice(0, 20); // Limit to top 20 skills
-
-    return allSkills;
-  }
-
-  // Helper method to extract name from text
-  extractName(text: string): { firstName?: string; lastName?: string } {
-    // Look for patterns like "John Doe" or "Doe, John"
-    const namePatterns = [
-      // "First Last" pattern
-      /\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\b/,
-      // "Last, First" pattern
-      /\b([A-Z][a-z]+),\s*([A-Z][a-z]+)\b/,
-    ];
-
-    for (const pattern of namePatterns) {
-      const match = text.match(pattern);
-      if (match) {
-        if (match[2] && text.includes(",")) {
-          // Last, First pattern
-          return { firstName: match[2], lastName: match[1] };
-        } else {
-          // First Last pattern
-          return { firstName: match[1], lastName: match[2] };
-        }
-      }
-    }
-
-    return {};
   }
 }
 
