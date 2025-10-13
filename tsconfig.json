@@ -10,7 +10,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "rootDir": "src",
-    "types": ["bun-types"]
+    "types": ["bun-types", "node"]
   },
   "include": ["src"]
 }
