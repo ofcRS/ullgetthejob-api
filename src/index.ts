@@ -1,11 +1,22 @@
-import { app } from './app'
-import { queueWorker } from './workers/queue-worker'
-import { env } from './config/env'
+import { app } from "./app-simple";
+import { env } from "./config/env";
 
 const server = app.listen(env.PORT, () => {
-  console.log(`API listening on http://localhost:${env.PORT}`)
-  queueWorker.start()
-})
+  console.log(`
+🚀 UllGetTheJob API MVP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Server: http://localhost:${env.PORT}
+Health: http://localhost:${env.PORT}/api/health
+Environment: ${env.NODE_ENV}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  `);
+});
 
-export type ServerType = typeof server
+// Graceful shutdown
+process.on("SIGINT", async () => {
+  console.log("\n🛑 Shutting down gracefully...");
+  await server.stop();
+  process.exit(0);
+});
 
+export type ServerType = typeof server;
