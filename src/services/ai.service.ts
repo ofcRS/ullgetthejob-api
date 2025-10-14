@@ -34,6 +34,46 @@ export class AIService {
   private baseURL = 'https://openrouter.ai/api/v1/chat/completions'
   private defaultModel = 'anthropic/claude-3.5-sonnet'
 
+  async extractJobSkills(jobDescription: string): Promise<string[]> {
+    const prompt = `
+Extract ONLY technical skills and tools mentioned in this job description.
+
+Job Description:
+${jobDescription}
+
+Return a JSON array of strings. Each skill should be:
+- A specific technology, tool, or technical skill
+- Normalized (e.g., "React.js" → "React", "PostgreSQL" → "PostgreSQL")
+- No soft skills (exclude: "teamwork", "communication", etc.)
+- Maximum 15 skills
+
+Example: ["TypeScript", "React", "Node.js", "PostgreSQL", "Docker"]
+
+Return ONLY the JSON array, nothing else.
+`
+
+    const response = await fetch(this.baseURL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.openRouterKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://ullgetthejob.com',
+        'X-Title': 'UllGetTheJob Skill Extractor'
+      },
+      body: JSON.stringify({
+        model: this.defaultModel,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+        max_tokens: 500
+      })
+    })
+
+    const data = await response.json()
+    const content = data.choices?.[0]?.message?.content as string | undefined
+    const jsonMatch = content?.match(/\[[\s\S]*\]/)
+    return jsonMatch ? JSON.parse(jsonMatch[0]) : []
+  }
+
   async customizeCV(
     originalCV: ParsedCV, 
     jobDescription: string,
@@ -53,9 +93,15 @@ ${jobDescription}
 IMPORTANT RULES:
 1. DO NOT invent new skills or experiences
 2. ONLY reorganize and highlight existing content
-3. Emphasize skills that match job requirements
-4. Reorder experience to prioritize relevant work
-5. Extract and highlight matching keywords
+3. Rewrite experience bullets to emphasize achievements matching job requirements
+4. Extract and prioritize skills mentioned in job description
+5. Reorder experience to show most relevant first
+
+For experience section:
+- Keep factual details (dates, companies, titles)
+- Rewrite achievement bullets to highlight relevant aspects
+- Use action verbs and quantify results
+- Maximum 4-5 bullets per role, prioritize relevant ones
 
 Return ONLY valid JSON (no markdown) with this structure:
 {
@@ -64,12 +110,11 @@ Return ONLY valid JSON (no markdown) with this structure:
   "email": "string",
   "phone": "string or null",
   "title": "string (professional title)",
-  "summary": "string (2-3 sentences highlighting relevant experience)",
-  "experience": "string (detailed, emphasizing relevant projects)",
+  "summary": "string (2-3 sentences highlighting experience relevant to THIS job)",
+  "experience": "string (detailed, re-ordered and re-written to emphasize relevant projects and achievements)",
   "education": "string",
-  "skills": ["array", "of", "relevant", "skills"],
-  "projects": "string (relevant projects)",
-  "area": "string (location) or null"
+  "skills": ["array", "of", "skills", "from", "original", "CV", "prioritized", "by", "relevance"],
+  "projects": "string (relevant projects, re-ordered by relevance)"
 }
 `
 
@@ -127,32 +172,42 @@ Return ONLY valid JSON (no markdown) with this structure:
   ): Promise<string> {
     const selectedModel = model || this.defaultModel
     
-    const prompt = `
-Write a professional cover letter for this job application.
+    const languageInstruction = /\b(требования|обязанности|опыт|знание|россии|москва|руб|hh\.ru)\b/i.test(jobDescription) 
+      ? 'Write in Russian language' 
+      : 'Write in English language'
 
-Candidate Info:
-Name: ${cv.firstName} ${cv.lastName}
-Title: ${cv.title}
-Skills: ${cv.skills?.join(', ')}
-Summary: ${cv.summary}
+    const telegramLine = (await import('../config/env')).env.TELEGRAM_HANDLE
+      ? `Contact via telegram ${(await import('../config/env')).env.TELEGRAM_HANDLE}`
+      : ''
+
+    const prompt = `
+${languageInstruction}
+
+Generate a concise, professional cover letter (150-200 words maximum).
+
+Format (EXACTLY):
+${languageInstruction.includes('Russian') ? `
+Здравствуйте, мой опыт и технические навыки идеально подходят под эту позицию. [2-3 specific skills matching job]. [1-2 relevant achievements]. ${telegramLine}
+` : `
+Hello, my experience and technical skills are a perfect fit for this position. [2-3 specific skills matching job]. [1-2 relevant achievements]. I'd be happy to discuss details ${telegramLine || 'via telegram'}
+`}
+
+Candidate:
+- Skills: ${cv.skills?.join(', ')}
+- Title: ${cv.title}
+- Experience: ${cv.experience}
 
 Job Description:
 ${jobDescription}
 
-Company:
-${companyInfo}
+Company: ${companyInfo}
 
 Requirements:
-- Professional and enthusiastic tone
-- 250-300 words maximum
-- Start with "Dear Hiring Manager,"
-- Mention 2-3 specific skills that match the job
-- Reference 1-2 relevant experiences
-- Show genuine interest in the company/role
-- End with call to action for interview
-- Use standard business letter format
-
-Write the complete letter now.
+- Match tone to job language
+- Highlight 2-3 skills that appear in BOTH CV and job description
+- Be specific about relevant experience
+- Keep under 200 words
+- Professional but friendly tone
 `
 
     try {

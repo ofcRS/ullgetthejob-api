@@ -1,5 +1,5 @@
 import { db } from '../db/client'
-import { cvs } from '../db/schema'
+import { parsedCvs } from '../db/schema'
 import { eq } from 'drizzle-orm'
 
 type CreateParsedCvInput = {
@@ -13,13 +13,24 @@ type CreateParsedCvInput = {
 export class StorageService {
   async createParsedCv(input: CreateParsedCvInput) {
     try {
-      const [row] = await db.insert(cvs).values({
-        userId: input.userId as any, // MVP: null allowed at DB layer for now
-        name: input.originalFilename || 'Uploaded CV',
-        filePath: input.filePath || '',
+      const [row] = await db.insert(parsedCvs).values({
+        userId: input.userId as any,
+        firstName: input.parsedData.firstName,
+        lastName: input.parsedData.lastName,
+        email: input.parsedData.email,
+        phone: input.parsedData.phone,
+        title: input.parsedData.title,
+        summary: input.parsedData.summary,
+        experience: input.parsedData.experience,
+        education: input.parsedData.education,
+        skills: input.parsedData.skills || [],
+        projects: input.parsedData.projects,
+        fullText: input.parsedData.fullText,
         originalFilename: input.originalFilename,
-        contentType: undefined,
-        parsedData: input.parsedData,
+        filePath: input.filePath,
+        modelUsed: input.modelUsed,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       }).returning()
       return row
     } catch (e) {
@@ -29,7 +40,7 @@ export class StorageService {
   }
 
   async getCvById(id: string) {
-    const [row] = await db.select().from(cvs).where(eq(cvs.id, id))
+    const [row] = await db.select().from(parsedCvs).where(eq(parsedCvs.id, id))
     return row
   }
 }

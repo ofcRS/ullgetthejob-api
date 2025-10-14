@@ -90,3 +90,27 @@ export const applicationQueue = pgTable('application_queue', {
   updatedAt: timestamp('updated_at').defaultNow()
 })
 
+export const parsedCvs = pgTable('parsed_cvs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+
+  firstName: varchar('first_name', { length: 100 }),
+  lastName: varchar('last_name', { length: 100 }),
+  email: varchar('email', { length: 255 }),
+  phone: varchar('phone', { length: 50 }),
+  title: varchar('title', { length: 255 }),
+  summary: text('summary'),
+  experience: text('experience'),
+  education: text('education'),
+  skills: varchar('skills').array().default([]),
+  projects: text('projects'),
+  fullText: text('full_text'),
+
+  originalFilename: varchar('original_filename', { length: 255 }),
+  filePath: text('file_path'),
+  modelUsed: varchar('model_used', { length: 100 }),
+
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow()
+})
+

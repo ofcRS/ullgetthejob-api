@@ -1,5 +1,6 @@
 import { Elysia, t } from 'elysia'
 import { env } from '../config/env'
+import { realtime } from '../services/realtime.service'
 
 const wsClients = new Set<any>()
 
@@ -14,17 +15,19 @@ export function registerWsRoutes() {
       },
       message(ws, message) {
         try {
-          const data = JSON.parse(String(message)) as { type?: string; searchParams?: any }
-          if (data.type === 'subscribe' && data.searchParams) {
+          const data = JSON.parse(String(message)) as { type?: string; searchParams?: any; clientId?: string }
+          if (data.type === 'register' && data.clientId) {
+            realtime.registerClient(data.clientId, ws.raw)
+            ws.send(JSON.stringify({ type: 'registered', clientId: data.clientId }))
+          } else if (data.type === 'subscribe' && data.searchParams) {
             ws.send(JSON.stringify({ type: 'subscribed', searchParams: data.searchParams }))
           } else {
             ws.send(JSON.stringify({ type: 'echo', message }))
           }
         } catch {}
       },
-      close() {
-        // Remove closed clients
-        // Note: ws.raw not available here; Set will be cleaned by broadcast loop on failure
+      close(ws) {
+        realtime.unregisterBySocket(ws.raw)
       }
     })
     .post('/api/v1/jobs/broadcast', ({ headers, body, set }) => {
@@ -37,18 +40,8 @@ export function registerWsRoutes() {
       const data = body as { jobs?: any[]; stats?: any }
       const jobs = data.jobs ?? []
 
-      let delivered = 0
-      for (const client of wsClients) {
-        try {
-          client.send(JSON.stringify({ type: 'new_jobs', jobs, stats: data.stats }))
-          delivered++
-        } catch {
-          // drop failed clients silently
-          wsClients.delete(client)
-        }
-      }
-
-      return { ok: true, delivered }
+      realtime.broadcast({ type: 'new_jobs', jobs, stats: data.stats })
+      return { ok: true }
     }, {
       body: t.Object({ jobs: t.Array(t.Any(), { default: [] }), stats: t.Optional(t.Record(t.String(), t.Any())) })
     })

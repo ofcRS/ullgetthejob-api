@@ -18,13 +18,14 @@ export class CVParserService {
   private openRouterKey = env.OPENROUTER_API_KEY;
   private baseURL = "https://openrouter.ai/api/v1/chat/completions";
 
-  async parseCV(file: File): Promise<ParsedCV> {
-    // Step 1: Extract raw text from file
+  async parseCV(file: File, onProgress?: (stage: string) => void): Promise<ParsedCV> {
+    onProgress?.('Extracting text from file...')
     const rawText = await this.extractRawText(file);
 
-    // Step 2: Send to AI for structured extraction
+    onProgress?.('Analyzing with AI...')
     const structured = await this.extractStructureWithAI(rawText);
 
+    onProgress?.('Complete!')
     return structured;
   }
 
