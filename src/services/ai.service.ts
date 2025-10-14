@@ -34,22 +34,37 @@ export class AIService {
   private baseURL = 'https://openrouter.ai/api/v1/chat/completions'
   private defaultModel = 'anthropic/claude-3.5-sonnet'
 
-  async extractJobSkills(jobDescription: string): Promise<string[]> {
+  async extractJobSkills(jobDescription: string): Promise<any> {
     const prompt = `
-Extract ONLY technical skills and tools mentioned in this job description.
+Extract technical requirements from this job description.
 
 Job Description:
 ${jobDescription}
 
-Return a JSON array of strings. Each skill should be:
-- A specific technology, tool, or technical skill
-- Normalized (e.g., "React.js" → "React", "PostgreSQL" → "PostgreSQL")
-- No soft skills (exclude: "teamwork", "communication", etc.)
-- Maximum 15 skills
+Categorize skills into:
+1. REQUIRED (must-have skills)
+2. PREFERRED (nice-to-have)
+3. TOOLS (specific software/platforms)
+4. FRAMEWORKS (React, Next.js, etc.)
 
-Example: ["TypeScript", "React", "Node.js", "PostgreSQL", "Docker"]
+Return JSON:
+{
+  "required": ["TypeScript", "React"],
+  "preferred": ["GraphQL"],
+  "tools": ["Docker", "Kubernetes"],
+  "frameworks": ["Next.js", "NestJS"],
+  "categories": {
+    "frontend": ["React", "TypeScript"],
+    "backend": ["Node.js", "PostgreSQL"],
+    "devops": ["Docker", "Kubernetes"]
+  }
+}
 
-Return ONLY the JSON array, nothing else.
+Rules:
+- Normalize names (e.g., "React.js" → "React")
+- Exclude soft skills
+- Include version numbers if specified
+- Maximum 20 skills total
 `
 
     const response = await fetch(this.baseURL, {
@@ -64,14 +79,14 @@ Return ONLY the JSON array, nothing else.
         model: this.defaultModel,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.1,
-        max_tokens: 500
+        max_tokens: 700
       })
     })
 
     const data = await response.json()
     const content = data.choices?.[0]?.message?.content as string | undefined
-    const jsonMatch = content?.match(/\[[\s\S]*\]/)
-    return jsonMatch ? JSON.parse(jsonMatch[0]) : []
+    const jsonMatch = content?.match(/\{[\s\S]*\}/)
+    return jsonMatch ? JSON.parse(jsonMatch[0]) : { required: [], preferred: [], tools: [], frameworks: [], categories: {} }
   }
 
   async customizeCV(
@@ -81,40 +96,58 @@ Return ONLY the JSON array, nothing else.
   ): Promise<CustomizedCV> {
     const selectedModel = model || this.defaultModel
     
-    const prompt = `
-You are a professional CV optimizer. Given a CV and job description, restructure the CV to maximize match with the job requirements.
+    const jobSkills = await this.extractJobSkills(jobDescription)
 
-Original CV:
+    const prompt = `
+You are an expert CV optimizer. Transform this CV to maximize match with the job requirements.
+
+CRITICAL RULES:
+1. DO NOT invent experiences or skills not in the original CV
+2. HEAVILY rewrite work experience descriptions to emphasize relevant achievements
+3. Reorder ALL content by relevance to THIS specific job
+4. Extract and quantify achievements (use metrics: "improved by X%", "managed Y users")
+5. Match technical terminology from job description
+
+ORIGINAL CV:
 ${JSON.stringify(originalCV, null, 2)}
 
-Job Description:
+JOB DESCRIPTION:
 ${jobDescription}
 
-IMPORTANT RULES:
-1. DO NOT invent new skills or experiences
-2. ONLY reorganize and highlight existing content
-3. Rewrite experience bullets to emphasize achievements matching job requirements
-4. Extract and prioritize skills mentioned in job description
-5. Reorder experience to show most relevant first
+REQUIRED JOB SKILLS (extracted):
+${Array.isArray(jobSkills) ? jobSkills.join(', ') : (jobSkills.required || []).join(', ')}
 
-For experience section:
-- Keep factual details (dates, companies, titles)
-- Rewrite achievement bullets to highlight relevant aspects
-- Use action verbs and quantify results
-- Maximum 4-5 bullets per role, prioritize relevant ones
+WORK EXPERIENCE TRANSFORMATION RULES:
+- For EACH role, identify 3-5 accomplishments that match job requirements
+- Rewrite using STAR method (Situation, Task, Action, Result)
+- Include quantifiable metrics where possible
+- Use action verbs: "Architected", "Engineered", "Optimized", "Designed"
+- Emphasize relevant technologies and methodologies
 
-Return ONLY valid JSON (no markdown) with this structure:
+SKILLS SECTION RULES:
+- Prioritize skills that appear in BOTH CV and job description
+- Group skills by category (Frontend, Backend, DevOps, etc.)
+- Remove skills not relevant to this position
+- Add proficiency indicators if present in original
+
+Example transformation:
+BEFORE: "Worked on authentication system"
+AFTER: "Engineered OAuth2-based authentication system serving 1M+ users, reducing login time by 40% and improving security compliance"
+
+Return ONLY valid JSON with this structure:
 {
-  "firstName": "string or null",
-  "lastName": "string or null",
+  "firstName": "string",
+  "lastName": "string",
   "email": "string",
-  "phone": "string or null",
-  "title": "string (professional title)",
-  "summary": "string (2-3 sentences highlighting experience relevant to THIS job)",
-  "experience": "string (detailed, re-ordered and re-written to emphasize relevant projects and achievements)",
+  "phone": "string",
+  "title": "string (tailored to job)",
+  "summary": "string (2-3 sentences highlighting RELEVANT experience with METRICS)",
+  "experience": "string (DETAILED, re-ordered by relevance, accomplishment-focused with metrics)",
   "education": "string",
-  "skills": ["array", "of", "skills", "from", "original", "CV", "prioritized", "by", "relevance"],
-  "projects": "string (relevant projects, re-ordered by relevance)"
+  "skills": ["array", "prioritized", "by", "relevance"],
+  "projects": "string (relevant projects re-ordered)",
+  "matchedSkills": ["skills", "found", "in", "job"],
+  "addedKeywords": ["job", "keywords", "naturally", "incorporated"]
 }
 `
 
@@ -130,8 +163,8 @@ Return ONLY valid JSON (no markdown) with this structure:
         body: JSON.stringify({
           model: selectedModel,
           messages: [{ role: 'user', content: prompt }],
-          temperature: 0.3,
-          max_tokens: 2500
+          temperature: 0.25,
+          max_tokens: 3000
         })
       })
 
@@ -157,6 +190,10 @@ Return ONLY valid JSON (no markdown) with this structure:
         customizedData.skills = customizedData.skills.split(',').map((s: string) => s.trim()).filter(Boolean)
       }
 
+      // Normalize optional arrays
+      if (!Array.isArray(customizedData.matchedSkills)) customizedData.matchedSkills = []
+      if (!Array.isArray(customizedData.addedKeywords)) customizedData.addedKeywords = []
+
       return customizedData as CustomizedCV
     } catch (error) {
       console.error('AI customization failed:', error)
@@ -173,41 +210,44 @@ Return ONLY valid JSON (no markdown) with this structure:
     const selectedModel = model || this.defaultModel
     
     const languageInstruction = /\b(требования|обязанности|опыт|знание|россии|москва|руб|hh\.ru)\b/i.test(jobDescription) 
-      ? 'Write in Russian language' 
-      : 'Write in English language'
+      ? 'Russian' 
+      : 'English'
 
     const telegramLine = (await import('../config/env')).env.TELEGRAM_HANDLE
       ? `Contact via telegram ${(await import('../config/env')).env.TELEGRAM_HANDLE}`
       : ''
 
     const prompt = `
-${languageInstruction}
+Generate a compelling cover letter (150-250 words).
 
-Generate a concise, professional cover letter (150-200 words maximum).
+Language: ${languageInstruction}
 
-Format (EXACTLY):
-${languageInstruction.includes('Russian') ? `
-Здравствуйте, мой опыт и технические навыки идеально подходят под эту позицию. [2-3 specific skills matching job]. [1-2 relevant achievements]. ${telegramLine}
-` : `
-Hello, my experience and technical skills are a perfect fit for this position. [2-3 specific skills matching job]. [1-2 relevant achievements]. I'd be happy to discuss details ${telegramLine || 'via telegram'}
-`}
-
-Candidate:
-- Skills: ${cv.skills?.join(', ')}
+Candidate Background:
+- Name: ${cv.firstName || ''} ${cv.lastName || ''}
 - Title: ${cv.title}
-- Experience: ${cv.experience}
+- Top Skills: ${cv.skills?.slice(0, 5).join(', ')}
+- Key Experience: ${cv.experience?.substring(0, 500)}
+- Matched Skills: ${(cv as any).matchedSkills?.join(', ')}
 
-Job Description:
-${jobDescription}
-
+Job: ${jobDescription}
 Company: ${companyInfo}
 
+Structure:
+1. Opening: Express enthusiasm and state 2-3 matching skills
+2. Body: Highlight 1-2 specific achievements with METRICS that directly relate to job requirements
+3. Closing: Express interest in contributing specific value
+
+Tone: Professional but personable
 Requirements:
-- Match tone to job language
-- Highlight 2-3 skills that appear in BOTH CV and job description
-- Be specific about relevant experience
-- Keep under 200 words
-- Professional but friendly tone
+- Use specific numbers and achievements
+- Reference technologies from job description
+- Keep under 250 words
+- Natural, confident language
+- No generic phrases like "team player" without context
+
+${languageInstruction === 'Russian' ? 
+  'Пишите естественно, как носитель русского языка. Избегайте клише.' :
+  'Write naturally. Avoid clichés.'}
 `
 
     try {
@@ -222,8 +262,8 @@ Requirements:
         body: JSON.stringify({
           model: selectedModel,
           messages: [{ role: 'user', content: prompt }],
-          temperature: 0.7,
-          max_tokens: 1200
+          temperature: 0.6,
+          max_tokens: 800
         })
       })
 

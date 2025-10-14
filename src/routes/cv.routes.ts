@@ -37,6 +37,32 @@ export function registerCvRoutes() {
     }, {
       body: t.Object({ file: t.File(), clientId: t.Optional(t.String()) })
     })
+    .post('/api/cv/import/hh/:id', async ({ params }) => {
+      const id = (params as any).id as string
+      const CORE_URL = process.env.CORE_URL || 'http://localhost:4000'
+      const res = await fetch(`${CORE_URL}/api/hh/resumes/${id}`)
+      const data = await res.json()
+      if (!data.success) return { success: false, error: data.error || 'Failed to fetch resume' }
+
+      const r = data.resume
+      const parsed: any = {
+        firstName: r?.first_name || r?.firstName,
+        lastName: r?.last_name || r?.lastName,
+        email: r?.contact?.email || r?.email,
+        phone: r?.contact?.phone || r?.phone,
+        title: r?.title || r?.position,
+        summary: r?.summary || r?.skills_description,
+        experience: Array.isArray(r?.experience) ? r.experience.map((e: any) => `• ${e.position} @ ${e.company}\n${e.description || ''}`).join('\n\n') : (r?.experience || ''),
+        education: Array.isArray(r?.education) ? r.education.map((e: any) => `${e.school} — ${e.result || ''}`).join('\n') : (r?.education || ''),
+        skills: Array.isArray(r?.skills) ? r.skills.map((s: any) => (s.name || s).toString()) : [],
+        projects: '',
+        fullText: ''
+      }
+
+      const storage = new StorageService()
+      const saved = await storage.createParsedCv({ userId: null, parsedData: parsed, originalFilename: `hh_${id}.json`, modelUsed: 'import' })
+      return { success: true, cv: parsed, id: saved?.id }
+    })
     .get('/api/cv', async () => {
       const items = await storage.listParsedCvs(50)
       return { success: true, items }

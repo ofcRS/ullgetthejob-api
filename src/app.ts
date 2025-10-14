@@ -8,6 +8,7 @@ import { registerCvRoutes } from './routes/cv.routes'
 import { registerJobRoutes } from './routes/job.routes'
 import { registerApplicationRoutes } from './routes/application.routes'
 import { registerWsRoutes } from './routes/ws.routes'
+import { registerAuthRoutes } from './routes/auth.routes'
 
 export const app = new Elysia()
   .use(cors({
@@ -30,6 +31,7 @@ export const app = new Elysia()
   .use(registerCvRoutes())
   .use(registerJobRoutes())
   .use(registerApplicationRoutes())
+  .use(registerAuthRoutes())
 
   // Realtime + broadcasts
   .use(registerWsRoutes())
