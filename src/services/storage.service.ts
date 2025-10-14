@@ -43,6 +43,11 @@ export class StorageService {
     const [row] = await db.select().from(parsedCvs).where(eq(parsedCvs.id, id))
     return row
   }
+
+  async listParsedCvs(limit = 20) {
+    const rows = await db.select().from(parsedCvs).limit(limit)
+    return rows
+  }
 }
 
 

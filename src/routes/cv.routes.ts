@@ -37,6 +37,10 @@ export function registerCvRoutes() {
     }, {
       body: t.Object({ file: t.File(), clientId: t.Optional(t.String()) })
     })
+    .get('/api/cv', async () => {
+      const items = await storage.listParsedCvs(50)
+      return { success: true, items }
+    })
     .get('/api/cv/:id', async ({ params, set }) => {
       const { id } = params as { id: string }
       const row = await storage.getCvById(id)
