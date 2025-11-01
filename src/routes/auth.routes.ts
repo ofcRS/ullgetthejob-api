@@ -1,26 +1,10 @@
 import { Elysia } from 'elysia'
 import { randomUUID } from 'node:crypto'
 import { env } from '../config/env'
-import { createSession, validateSession, SESSION_COOKIE_NAME } from '../middleware/session'
+import { createSession, validateSession, extractSessionCookie, serializeSessionCookie } from '../middleware/session'
 
 const CORE_URL = env.CORE_URL
 const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
-
-type SessionCookieHandle = {
-  value?: string
-  set?: (options: {
-    value: string
-    httpOnly?: boolean
-    secure?: boolean
-    sameSite?: 'lax' | 'strict' | 'none'
-    path?: string
-    maxAge?: number
-  }) => void
-  remove?: () => void
-}
-
-const getSessionCookie = (cookie: Record<string, unknown> | undefined) =>
-  cookie?.[SESSION_COOKIE_NAME] as SessionCookieHandle | undefined
 
 export function registerAuthRoutes() {
   return new Elysia({ name: 'auth-routes' })
@@ -28,15 +12,15 @@ export function registerAuthRoutes() {
       const res = await fetch(`${CORE_URL}/auth/hh/redirect`)
       return await res.json()
     })
-    .get('/api/auth/hh/callback', async ({ query, cookie, set }) => {
+    .get('/api/auth/hh/callback', async ({ query, request, set }) => {
       const code = (query as any)?.code as string | undefined
       if (!code) {
         set.status = 400
         return { success: false, error: 'Missing code' }
       }
 
-      const sessionCookie = getSessionCookie(cookie)
-      const existingSession = validateSession(sessionCookie?.value)
+      const existingCookieValue = extractSessionCookie(request.headers.get('cookie'))
+      const existingSession = validateSession(existingCookieValue)
       const sessionId = existingSession.valid && existingSession.session
         ? existingSession.session.id
         : randomUUID()
@@ -66,30 +50,37 @@ export function registerAuthRoutes() {
         })
 
         const maxAge = Math.max(Math.floor((session.exp - Date.now()) / 1000), 60)
-
-        sessionCookie?.set?.({
-          value,
-          httpOnly: true,
+        set.headers['Set-Cookie'] = serializeSessionCookie(value, {
+          maxAge: Math.min(maxAge, SESSION_MAX_AGE_SECONDS),
           secure: env.NODE_ENV === 'production',
-          sameSite: 'lax',
-          path: '/',
-          maxAge: Math.min(maxAge, SESSION_MAX_AGE_SECONDS)
+          httpOnly: true,
+          sameSite: 'lax'
         })
 
         data.connected = true
         data.session_id = session.id
       } else if (res.status === 401 || res.status === 403) {
-        sessionCookie?.remove?.()
+        set.headers['Set-Cookie'] = serializeSessionCookie('', {
+          maxAge: 0,
+          secure: env.NODE_ENV === 'production',
+          httpOnly: true,
+          sameSite: 'lax'
+        })
       }
 
       return data
     })
-    .get('/api/auth/hh/status', async ({ cookie }) => {
-      const sessionCookie = getSessionCookie(cookie)
-      const validation = validateSession(sessionCookie?.value)
+    .get('/api/auth/hh/status', async ({ request, set }) => {
+      const cookieValue = extractSessionCookie(request.headers.get('cookie'))
+      const validation = validateSession(cookieValue)
 
       if (!validation.valid || !validation.session) {
-        sessionCookie?.remove?.()
+        set.headers['Set-Cookie'] = serializeSessionCookie('', {
+          maxAge: 0,
+          secure: env.NODE_ENV === 'production',
+          httpOnly: true,
+          sameSite: 'lax'
+        })
         return { connected: false }
       }
 
@@ -103,7 +94,12 @@ export function registerAuthRoutes() {
 
         if (!res.ok) {
           if (res.status === 401 || res.status === 403) {
-            sessionCookie?.remove?.()
+            set.headers['Set-Cookie'] = serializeSessionCookie('', {
+              maxAge: 0,
+              secure: env.NODE_ENV === 'production',
+              httpOnly: true,
+              sameSite: 'lax'
+            })
           }
           return { connected: false }
         }
@@ -115,9 +111,9 @@ export function registerAuthRoutes() {
         return { connected: false }
       }
     })
-    .get('/api/hh/resumes', async ({ cookie, set }) => {
-      const sessionCookie = getSessionCookie(cookie)
-      const validation = validateSession(sessionCookie?.value)
+    .get('/api/hh/resumes', async ({ request, set }) => {
+      const cookieValue = extractSessionCookie(request.headers.get('cookie'))
+      const validation = validateSession(cookieValue)
 
       if (!validation.valid || !validation.session) {
         set.status = 401
@@ -133,7 +129,12 @@ export function registerAuthRoutes() {
         })
 
         if (res.status === 401 || res.status === 403) {
-          sessionCookie?.remove?.()
+          set.headers['Set-Cookie'] = serializeSessionCookie('', {
+            maxAge: 0,
+            secure: env.NODE_ENV === 'production',
+            httpOnly: true,
+            sameSite: 'lax'
+          })
         }
 
         set.status = res.status
@@ -144,10 +145,10 @@ export function registerAuthRoutes() {
         return { success: false, error: 'Failed to reach core service' }
       }
     })
-    .get('/api/hh/resumes/:id', async ({ params, cookie, set }) => {
+    .get('/api/hh/resumes/:id', async ({ params, request, set }) => {
       const id = (params as any).id
-      const sessionCookie = getSessionCookie(cookie)
-      const validation = validateSession(sessionCookie?.value)
+      const cookieValue = extractSessionCookie(request.headers.get('cookie'))
+      const validation = validateSession(cookieValue)
 
       if (!validation.valid || !validation.session) {
         set.status = 401
@@ -163,7 +164,12 @@ export function registerAuthRoutes() {
         })
 
         if (res.status === 401 || res.status === 403) {
-          sessionCookie?.remove?.()
+          set.headers['Set-Cookie'] = serializeSessionCookie('', {
+            maxAge: 0,
+            secure: env.NODE_ENV === 'production',
+            httpOnly: true,
+            sameSite: 'lax'
+          })
         }
 
         set.status = res.status

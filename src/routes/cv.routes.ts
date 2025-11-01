@@ -3,15 +3,7 @@ import { cvParserService } from '../services/cv-parser.service'
 import { StorageService } from '../services/storage.service'
 import { aiService } from '../services/ai.service'
 import { env } from '../config/env'
-import { validateSession, SESSION_COOKIE_NAME } from '../middleware/session'
-
-type SessionCookieHandle = {
-  value?: string
-  remove?: () => void
-}
-
-const getSessionCookie = (cookie: Record<string, unknown> | undefined) =>
-  cookie?.[SESSION_COOKIE_NAME] as SessionCookieHandle | undefined
+import { validateSession, extractSessionCookie, serializeSessionCookie } from '../middleware/session'
 
 const storage = new StorageService()
 
@@ -47,13 +39,19 @@ export function registerCvRoutes() {
     }, {
       body: t.Object({ file: t.File(), clientId: t.Optional(t.String()) })
     })
-    .post('/api/cv/import/hh/:id', async ({ params, cookie, set }) => {
+    .post('/api/cv/import/hh/:id', async ({ params, request, set }) => {
       const id = (params as any).id as string
-      const sessionCookie = getSessionCookie(cookie)
-      const sessionValidation = validateSession(sessionCookie?.value)
+      const cookieValue = extractSessionCookie(request.headers.get('cookie'))
+      const sessionValidation = validateSession(cookieValue)
 
       if (!sessionValidation.valid || !sessionValidation.session) {
         set.status = 401
+        set.headers['Set-Cookie'] = serializeSessionCookie('', {
+          maxAge: 0,
+          secure: env.NODE_ENV === 'production',
+          httpOnly: true,
+          sameSite: 'lax'
+        })
         return { success: false, error: 'HH.ru account not connected' }
       }
 

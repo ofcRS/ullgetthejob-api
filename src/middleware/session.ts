@@ -10,6 +10,14 @@ if (!process.env.SESSION_SECRET && process.env.NODE_ENV !== 'production') {
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 export const SESSION_COOKIE_NAME = 'hh_session'
 
+export interface SessionCookieOptions {
+  maxAge?: number
+  secure?: boolean
+  path?: string
+  sameSite?: 'lax' | 'strict' | 'none'
+  httpOnly?: boolean
+}
+
 export interface SessionPayload {
   id: string
   token: string
@@ -70,5 +78,47 @@ export function validateSession(cookieValue?: string) {
     console.error('Failed to parse session cookie', error)
     return { valid: false as const }
   }
+}
+
+export function serializeSessionCookie(value: string, options: SessionCookieOptions = {}) {
+  const segments = [`${SESSION_COOKIE_NAME}=${encodeURIComponent(value)}`]
+
+  const maxAge = options.maxAge ?? Math.floor(DEFAULT_TTL_MS / 1000)
+  segments.push(`Max-Age=${maxAge}`)
+
+  const path = options.path ?? '/'
+  segments.push(`Path=${path}`)
+
+  if (options.httpOnly ?? true) {
+    segments.push('HttpOnly')
+  }
+
+  const sameSite = (options.sameSite ?? 'lax').toLowerCase()
+  segments.push(`SameSite=${capitalize(sameSite)}`)
+
+  if (options.secure) {
+    segments.push('Secure')
+  }
+
+  return segments.join('; ')
+}
+
+export function extractSessionCookie(headerValue?: string | null) {
+  if (!headerValue) return undefined
+
+  const cookies = headerValue.split(/;\s*/)
+  for (const cookie of cookies) {
+    if (!cookie) continue
+    const [name, ...rest] = cookie.split('=')
+    if (name?.trim() === SESSION_COOKIE_NAME) {
+      return decodeURIComponent(rest.join('='))
+    }
+  }
+  return undefined
+}
+
+function capitalize(value: string) {
+  if (!value) return value
+  return value[0].toUpperCase() + value.slice(1)
 }
 
