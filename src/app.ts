@@ -1,5 +1,6 @@
 import { Elysia } from 'elysia'
 import { cors } from '@elysiajs/cors'
+import { cookie } from '@elysiajs/cookie'
 import { env } from './config/env'
 import { errorHandler } from './middleware/error-handler'
 import { registerHealthRoutes } from './routes/health.routes'
@@ -21,6 +22,7 @@ export const app = new Elysia()
     },
     credentials: true
   }))
+  .use(cookie())
   .use(errorHandler())
 
   // Health and basic info

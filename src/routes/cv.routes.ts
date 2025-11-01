@@ -2,6 +2,16 @@ import { Elysia, t } from 'elysia'
 import { cvParserService } from '../services/cv-parser.service'
 import { StorageService } from '../services/storage.service'
 import { aiService } from '../services/ai.service'
+import { env } from '../config/env'
+import { validateSession, SESSION_COOKIE_NAME } from '../middleware/session'
+
+type SessionCookieHandle = {
+  value?: string
+  remove?: () => void
+}
+
+const getSessionCookie = (cookie: Record<string, unknown> | undefined) =>
+  cookie?.[SESSION_COOKIE_NAME] as SessionCookieHandle | undefined
 
 const storage = new StorageService()
 
@@ -37,10 +47,25 @@ export function registerCvRoutes() {
     }, {
       body: t.Object({ file: t.File(), clientId: t.Optional(t.String()) })
     })
-    .post('/api/cv/import/hh/:id', async ({ params }) => {
+    .post('/api/cv/import/hh/:id', async ({ params, cookie, set }) => {
       const id = (params as any).id as string
-      const CORE_URL = process.env.CORE_URL || 'http://localhost:4000'
-      const res = await fetch(`${CORE_URL}/api/hh/resumes/${id}`)
+      const sessionCookie = getSessionCookie(cookie)
+      const sessionValidation = validateSession(sessionCookie?.value)
+
+      if (!sessionValidation.valid || !sessionValidation.session) {
+        set.status = 401
+        return { success: false, error: 'HH.ru account not connected' }
+      }
+
+      const session = sessionValidation.session
+
+      const res = await fetch(`${env.CORE_URL}/api/hh/resumes/${encodeURIComponent(id)}`, {
+        headers: {
+          Authorization: `Bearer ${session.token}`,
+          'X-Session-Id': session.id
+        }
+      })
+
       const data = await res.json()
       if (!data.success) return { success: false, error: data.error || 'Failed to fetch resume' }
 
