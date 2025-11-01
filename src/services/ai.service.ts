@@ -35,6 +35,9 @@ export class AIService {
   private defaultModel = 'anthropic/claude-3.5-sonnet'
 
   async extractJobSkills(jobDescription: string): Promise<any> {
+    if (jobDescription.length < 200) {
+      console.warn('Job description too short, may be truncated:', jobDescription)
+    }
     const prompt = `
 Extract technical requirements from this job description.
 

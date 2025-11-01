@@ -38,6 +38,24 @@ export function registerJobRoutes() {
         schedule: t.Optional(t.String())
       })
     })
+    .get('/api/jobs/:id', async ({ params, set }) => {
+      const { id } = params as { id: string }
+
+      const response = await fetch(`${env.CORE_URL}/api/jobs/${encodeURIComponent(id)}`, {
+        headers: {
+          'X-Core-Secret': env.ORCHESTRATOR_SECRET
+        }
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        set.status = response.status === 404 ? 404 : 502
+        return { success: false, error: `Phoenix Core error: ${response.status} - ${errorText}` }
+      }
+
+      const data = await response.json()
+      return { success: true, job: data.job }
+    })
 }
 
 
