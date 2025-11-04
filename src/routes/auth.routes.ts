@@ -20,7 +20,7 @@ export function registerAuthRoutes() {
       }
 
       const existingCookieValue = extractSessionCookie(request.headers.get('cookie'))
-      const existingSession = validateSession(existingCookieValue)
+      const existingSession = await validateSession(existingCookieValue, false)
       const sessionId = existingSession.valid && existingSession.session
         ? existingSession.session.id
         : randomUUID()
@@ -72,7 +72,7 @@ export function registerAuthRoutes() {
     })
     .get('/api/auth/hh/status', async ({ request, set }) => {
       const cookieValue = extractSessionCookie(request.headers.get('cookie'))
-      const validation = validateSession(cookieValue)
+      const validation = await validateSession(cookieValue)
 
       if (!validation.valid || !validation.session) {
         set.headers['Set-Cookie'] = serializeSessionCookie('', {
@@ -113,7 +113,7 @@ export function registerAuthRoutes() {
     })
     .get('/api/hh/resumes', async ({ request, set }) => {
       const cookieValue = extractSessionCookie(request.headers.get('cookie'))
-      const validation = validateSession(cookieValue)
+      const validation = await validateSession(cookieValue)
 
       if (!validation.valid || !validation.session) {
         set.status = 401
@@ -148,7 +148,7 @@ export function registerAuthRoutes() {
     .get('/api/hh/resumes/:id', async ({ params, request, set }) => {
       const id = (params as any).id
       const cookieValue = extractSessionCookie(request.headers.get('cookie'))
-      const validation = validateSession(cookieValue)
+      const validation = await validateSession(cookieValue)
 
       if (!validation.valid || !validation.session) {
         set.status = 401

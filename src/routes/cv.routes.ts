@@ -4,19 +4,32 @@ import { StorageService } from '../services/storage.service'
 import { aiService } from '../services/ai.service'
 import { env } from '../config/env'
 import { validateSession, extractSessionCookie, serializeSessionCookie } from '../middleware/session'
+import { validateFileSize, validateFileType } from '../utils/validation'
 
 const storage = new StorageService()
 
 export function registerCvRoutes() {
   return new Elysia({ name: 'cv-routes' })
-    .post('/api/cv/upload', async ({ body }) => {
+    .post('/api/cv/upload', async ({ body, set }) => {
       const file = (body as any).file as File
       const clientId = (body as any).clientId as string | undefined
-      if (!file) throw new Error('No file provided')
+      if (!file) {
+        set.status = 400
+        return { success: false, error: 'No file provided' }
+      }
 
-      const allowed = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
-      if (!allowed.includes(file.type) && !file.name.match(/\.(pdf|doc|docx)$/i)) {
-        throw new Error('Invalid file type. Please upload PDF or DOCX')
+      // Validate file size
+      const sizeValidation = validateFileSize(file, env.MAX_FILE_SIZE)
+      if (!sizeValidation.valid) {
+        set.status = 400
+        return { success: false, error: sizeValidation.error }
+      }
+
+      // Validate file type using magic bytes
+      const typeValidation = await validateFileType(file)
+      if (!typeValidation.valid) {
+        set.status = 400
+        return { success: false, error: typeValidation.error }
       }
 
       const parsed = await cvParserService.parseCV(file, (stage) => {
@@ -42,7 +55,7 @@ export function registerCvRoutes() {
     .post('/api/cv/import/hh/:id', async ({ params, request, set }) => {
       const id = (params as any).id as string
       const cookieValue = extractSessionCookie(request.headers.get('cookie'))
-      const sessionValidation = validateSession(cookieValue)
+      const sessionValidation = await validateSession(cookieValue)
 
       if (!sessionValidation.valid || !sessionValidation.session) {
         set.status = 401
