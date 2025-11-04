@@ -1,10 +1,16 @@
 import { sign, unsign } from 'cookie-signature'
 import { randomUUID } from 'node:crypto'
+import { db } from '../db/client'
+import { sessions } from '../db/schema'
+import { eq, and, gt, isNull } from 'drizzle-orm'
 
-const SESSION_SECRET = process.env.SESSION_SECRET ?? 'dev_session_secret'
+const SESSION_SECRET = process.env.SESSION_SECRET
 
-if (!process.env.SESSION_SECRET && process.env.NODE_ENV !== 'production') {
-  console.warn('SESSION_SECRET not set; falling back to insecure development secret')
+if (!SESSION_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('SESSION_SECRET environment variable is required in production')
+  }
+  throw new Error('SESSION_SECRET environment variable is required for secure session management')
 }
 
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
@@ -52,7 +58,7 @@ export function createSession({
   return { value: signed, session: payload }
 }
 
-export function validateSession(cookieValue?: string) {
+export async function validateSession(cookieValue?: string, checkDatabase = true) {
   if (!cookieValue) {
     return { valid: false as const }
   }
@@ -73,10 +79,83 @@ export function validateSession(cookieValue?: string) {
       return { valid: false as const }
     }
 
+    // Check database for session validity
+    if (checkDatabase) {
+      const [dbSession] = await db
+        .select()
+        .from(sessions)
+        .where(
+          and(
+            eq(sessions.sessionId, payload.id),
+            gt(sessions.expiresAt, new Date()),
+            isNull(sessions.revokedAt)
+          )
+        )
+        .limit(1)
+
+      if (!dbSession) {
+        return { valid: false as const, reason: 'session_not_found_or_revoked' as const }
+      }
+
+      // Update last activity
+      await db
+        .update(sessions)
+        .set({ lastActivityAt: new Date() })
+        .where(eq(sessions.sessionId, payload.id))
+    }
+
     return { valid: true as const, session: payload }
   } catch (error) {
-    console.error('Failed to parse session cookie', error)
+    console.error('Failed to validate session', error)
     return { valid: false as const }
+  }
+}
+
+export async function createSessionInDb(sessionId: string, token: string, refreshToken: string | undefined, expiresAt: Date, userId?: string, metadata?: { ipAddress?: string; userAgent?: string }) {
+  try {
+    await db.insert(sessions).values({
+      sessionId,
+      userId: userId as any,
+      token,
+      refreshToken,
+      expiresAt,
+      ipAddress: metadata?.ipAddress,
+      userAgent: metadata?.userAgent,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    })
+  } catch (error) {
+    console.error('Failed to create session in database', error)
+    throw new Error('Failed to persist session')
+  }
+}
+
+export async function revokeSession(sessionId: string) {
+  try {
+    await db
+      .update(sessions)
+      .set({ revokedAt: new Date(), updatedAt: new Date() })
+      .where(eq(sessions.sessionId, sessionId))
+    return true
+  } catch (error) {
+    console.error('Failed to revoke session', error)
+    return false
+  }
+}
+
+export async function revokeAllUserSessions(userId: string) {
+  try {
+    await db
+      .update(sessions)
+      .set({ revokedAt: new Date(), updatedAt: new Date() })
+      .where(and(
+        eq(sessions.userId, userId as any),
+        isNull(sessions.revokedAt)
+      ))
+    return true
+  } catch (error) {
+    console.error('Failed to revoke user sessions', error)
+    return false
   }
 }
 

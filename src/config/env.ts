@@ -14,7 +14,7 @@ export const env = {
   HH_ACCESS_TOKEN: get('HH_ACCESS_TOKEN', ''),
   ORCHESTRATOR_SECRET: get('ORCHESTRATOR_SECRET', 'dev_orchestrator_secret'),
   CORE_URL: get('CORE_URL', 'http://localhost:4000'),
-  SESSION_SECRET: get('SESSION_SECRET', 'dev_session_secret'),
+  SESSION_SECRET: get('SESSION_SECRET'),
   ALLOWED_ORIGINS: (process.env.ALLOWED_ORIGINS ?? 'http://localhost:5173').split(',').map(s => s.trim()),
   MAX_FILE_SIZE: Number(process.env.MAX_FILE_SIZE ?? 10485760), // 10MB
   UPLOAD_DIR: process.env.UPLOAD_DIR ?? './uploads',
