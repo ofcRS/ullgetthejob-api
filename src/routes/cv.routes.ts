@@ -120,9 +120,12 @@ export function registerCvRoutes() {
           return { success: false, error: 'Missing CV or job description' }
         }
 
-        const customizedCV = await aiService.customizeCV(cv, jobDescription, model)
-        const coverLetter = await aiService.generateCoverLetter(customizedCV, jobDescription, 'Company', model)
+        // Extract job skills once and reuse to avoid duplicate AI calls
         const jobSkills = await aiService.extractJobSkills(jobDescription)
+
+        // Pass pre-extracted skills to customizeCV to prevent redundant extraction
+        const customizedCV = await aiService.customizeCV(cv, jobDescription, model, jobSkills)
+        const coverLetter = await aiService.generateCoverLetter(customizedCV, jobDescription, 'Company', model)
 
         return { success: true, customizedCV, coverLetter, modelUsed: model || 'anthropic/claude-3.5-sonnet', jobSkills }
       } catch (error) {

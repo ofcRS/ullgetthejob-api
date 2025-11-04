@@ -35,7 +35,7 @@ export class StorageService {
       return row
     } catch (e) {
       console.error('Failed to save parsed CV:', e)
-      return null
+      throw new Error(`Database error: Failed to save CV - ${e instanceof Error ? e.message : 'Unknown error'}`)
     }
   }
 
