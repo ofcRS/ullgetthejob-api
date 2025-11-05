@@ -3,15 +3,19 @@ import { cvParserService } from '../services/cv-parser.service'
 import { StorageService } from '../services/storage.service'
 import { aiService } from '../services/ai.service'
 import { env } from '../config/env'
-import { validateSession, extractSessionCookie, serializeSessionCookie } from '../middleware/session'
+import { authMiddleware, optionalAuthMiddleware, checkResourceOwnership } from '../middleware/auth'
 import { validateFileSize, validateFileType } from '../utils/validation'
-import type { CVUploadRequest, CVCustomizeRequest, ParsedCV } from '../types'
+import { fetchWithRetry } from '../utils/retry'
+import { logger } from '../utils/logger'
+import type { CVUploadRequest, CVCustomizeRequest, ParsedCV, AuthContext } from '../types'
 
 const storage = new StorageService()
 
 export function registerCvRoutes() {
   return new Elysia({ name: 'cv-routes' })
-    .post('/api/cv/upload', async ({ body, set }) => {
+    // CV Upload - requires authentication
+    .use(authMiddleware())
+    .post('/api/cv/upload', async ({ body, set, userId }) => {
       const { file, clientId } = body as CVUploadRequest
       if (!file) {
         set.status = 400
@@ -32,6 +36,8 @@ export function registerCvRoutes() {
         return { success: false, error: typeValidation.error }
       }
 
+      logger.info('CV upload started', { userId, filename: file.name, size: file.size })
+
       const parsed = await cvParserService.parseCV(file, (stage) => {
         // Notify client when possible
         try {
@@ -40,48 +46,46 @@ export function registerCvRoutes() {
         } catch {}
       })
 
-      // Persist parsed CV (MVP: no auth, demo user)
+      // Persist parsed CV with proper user ownership
       const saved = await storage.createParsedCv({
-        userId: null,
+        userId: userId, // Use authenticated user ID
         parsedData: parsed,
         originalFilename: file.name,
         modelUsed: 'anthropic/claude-3.5-sonnet'
       })
 
-      return { success: true, cv: parsed, id: saved?.id }
+      logger.info('CV uploaded successfully', { userId, cvId: saved.id })
+
+      return { success: true, cv: parsed, id: saved.id }
     }, {
       body: t.Object({ file: t.File(), clientId: t.Optional(t.String()) })
     })
-    .post('/api/cv/import/hh/:id', async ({ params, request, set }) => {
+    .post('/api/cv/import/hh/:id', async ({ params, session, userId, set }) => {
       const { id } = params as { id: string }
-      const cookieValue = extractSessionCookie(request.headers.get('cookie'))
-      const sessionValidation = await validateSession(cookieValue)
 
-      if (!sessionValidation.valid || !sessionValidation.session) {
-        set.status = 401
-        set.headers['Set-Cookie'] = serializeSessionCookie('', {
-          maxAge: 0,
-          secure: env.NODE_ENV === 'production',
-          httpOnly: true,
-          sameSite: 'lax'
-        })
-        return { success: false, error: 'HH.ru account not connected' }
-      }
+      logger.info('CV import from HH.ru started', { userId, hhResumeId: id })
 
-      const session = sessionValidation.session
-
-      const res = await fetch(`${env.CORE_URL}/api/hh/resumes/${encodeURIComponent(id)}`, {
+      const res = await fetchWithRetry(`${env.CORE_URL}/api/hh/resumes/${encodeURIComponent(id)}`, {
         headers: {
           Authorization: `Bearer ${session.token}`,
           'X-Session-Id': session.id
         }
+      }, {
+        maxRetries: 3,
+        retryableStatuses: [502, 503, 504],
+        onRetry: (attempt, error) => {
+          logger.warn('Retrying HH resume fetch', { attempt, userId, hhResumeId: id, error: error.message })
+        }
       })
 
       const data = await res.json()
-      if (!data.success) return { success: false, error: data.error || 'Failed to fetch resume' }
+      if (!data.success) {
+        logger.error('Failed to fetch HH resume', undefined, { userId, hhResumeId: id, error: data.error })
+        return { success: false, error: data.error || 'Failed to fetch resume' }
+      }
 
       const r = data.resume
-      const parsed: any = {
+      const parsed: ParsedCV = {
         firstName: r?.first_name || r?.firstName,
         lastName: r?.last_name || r?.lastName,
         email: r?.contact?.email || r?.email,
@@ -95,30 +99,51 @@ export function registerCvRoutes() {
         fullText: ''
       }
 
-      const storage = new StorageService()
-      const saved = await storage.createParsedCv({ userId: null, parsedData: parsed, originalFilename: `hh_${id}.json`, modelUsed: 'import' })
-      return { success: true, cv: parsed, id: saved?.id }
+      const saved = await storage.createParsedCv({
+        userId: userId, // Use authenticated user ID
+        parsedData: parsed,
+        originalFilename: `hh_${id}.json`,
+        modelUsed: 'import'
+      })
+
+      logger.info('CV imported successfully from HH.ru', { userId, cvId: saved.id, hhResumeId: id })
+
+      return { success: true, cv: parsed, id: saved.id }
     })
-    .get('/api/cv', async () => {
-      const items = await storage.listParsedCvs(50)
-      return { success: true, items }
+    // List user's CVs - requires authentication
+    .get('/api/cv', async ({ userId }) => {
+      logger.debug('Listing CVs', { userId })
+      const items = await storage.listParsedCvsByUser(userId, 50)
+      return { success: true, items, total: items.length }
     })
-    .get('/api/cv/:id', async ({ params, set }) => {
+    // Get specific CV - requires authentication and ownership check
+    .get('/api/cv/:id', async ({ params, set, userId }) => {
       const { id } = params as { id: string }
       const row = await storage.getCvById(id)
+
       if (!row) {
         set.status = 404
-        return { success: false, error: 'Not found' }
+        return { success: false, error: 'CV not found' }
       }
+
+      // Check ownership
+      if (!checkResourceOwnership(row.userId, userId)) {
+        logger.warn('Unauthorized CV access attempt', { userId, cvId: id, ownerId: row.userId })
+        set.status = 403
+        return { success: false, error: 'Forbidden: You do not have access to this CV' }
+      }
+
       return { success: true, cv: row }
     })
-    .post('/api/cv/customize', async ({ body, set }) => {
+    .post('/api/cv/customize', async ({ body, set, userId }) => {
       try {
         const { cv, jobDescription, model } = body as CVCustomizeRequest
         if (!cv || !jobDescription) {
           set.status = 400
           return { success: false, error: 'Missing CV or job description' }
         }
+
+        logger.info('CV customization started', { userId, model: model || 'default' })
 
         // Extract job skills once and reuse to avoid duplicate AI calls
         const jobSkills = await aiService.extractJobSkills(jobDescription)
@@ -127,13 +152,31 @@ export function registerCvRoutes() {
         const customizedCV = await aiService.customizeCV(cv, jobDescription, model, jobSkills)
         const coverLetter = await aiService.generateCoverLetter(customizedCV, jobDescription, 'Company', model)
 
+        logger.info('CV customization completed', { userId, skillsMatched: customizedCV.matchedSkills?.length })
+
         return { success: true, customizedCV, coverLetter, modelUsed: model || 'anthropic/claude-3.5-sonnet', jobSkills }
       } catch (error) {
+        logger.error('CV customization failed', error as Error, { userId })
         set.status = 500
         return { success: false, error: error instanceof Error ? error.message : 'Customization failed' }
       }
     }, {
-      body: t.Object({ cv: t.Any(), jobDescription: t.String(), model: t.Optional(t.String()) })
+      body: t.Object({
+        cv: t.Object({
+          firstName: t.Optional(t.String()),
+          lastName: t.Optional(t.String()),
+          email: t.Optional(t.String()),
+          phone: t.Optional(t.String()),
+          title: t.Optional(t.String()),
+          summary: t.Optional(t.String()),
+          experience: t.Optional(t.String()),
+          education: t.Optional(t.String()),
+          skills: t.Optional(t.Array(t.String())),
+          projects: t.Optional(t.String())
+        }),
+        jobDescription: t.String({ minLength: 10 }),
+        model: t.Optional(t.String())
+      })
     })
 }
 

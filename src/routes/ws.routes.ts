@@ -43,7 +43,20 @@ export function registerWsRoutes() {
       realtime.broadcast({ type: 'new_jobs', jobs, stats: data.stats })
       return { ok: true }
     }, {
-      body: t.Object({ jobs: t.Array(t.Any(), { default: [] }), stats: t.Optional(t.Record(t.String(), t.Any())) })
+      body: t.Object({
+        jobs: t.Array(t.Object({
+          id: t.String(),
+          externalId: t.String(),
+          title: t.String(),
+          company: t.Optional(t.String()),
+          salary: t.Optional(t.String()),
+          area: t.Optional(t.String()),
+          url: t.Optional(t.String()),
+          description: t.Optional(t.String()),
+          source: t.Optional(t.String())
+        }), { default: [] }),
+        stats: t.Optional(t.Record(t.String(), t.Unknown()))
+      })
     })
 }
 

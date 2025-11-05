@@ -226,7 +226,7 @@ Candidate Background:
 - Title: ${cv.title}
 - Top Skills: ${cv.skills?.slice(0, 5).join(', ')}
 - Key Experience: ${cv.experience?.substring(0, 500)}
-- Matched Skills: ${(cv as any).matchedSkills?.join(', ')}
+- Matched Skills: ${cv.matchedSkills?.join(', ') || 'N/A'}
 
 Job: ${jobDescription}
 Company: ${companyInfo}

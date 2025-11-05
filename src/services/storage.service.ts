@@ -1,6 +1,6 @@
 import { db } from '../db/client'
 import { parsedCvs } from '../db/schema'
-import { eq } from 'drizzle-orm'
+import { eq, isNull } from 'drizzle-orm'
 import type { CreateParsedCvInput, ParsedCV } from '../types'
 
 export class StorageService {
@@ -39,6 +39,24 @@ export class StorageService {
 
   async listParsedCvs(limit = 20): Promise<ParsedCV[]> {
     const rows = await db.select().from(parsedCvs).limit(limit)
+    return rows
+  }
+
+  async listParsedCvsByUser(userId: string | null, limit = 20): Promise<ParsedCV[]> {
+    if (userId === null) {
+      // For backward compatibility, if userId is null, return empty array
+      // or you could return all CVs with null userId for migration period
+      const rows = await db.select()
+        .from(parsedCvs)
+        .where(eq(parsedCvs.userId, null))
+        .limit(limit)
+      return rows
+    }
+
+    const rows = await db.select()
+      .from(parsedCvs)
+      .where(eq(parsedCvs.userId, userId))
+      .limit(limit)
     return rows
   }
 }
