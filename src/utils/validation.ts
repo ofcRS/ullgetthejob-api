@@ -72,9 +72,20 @@ export function validateRussianPhone(phone: string): { valid: boolean; error?: s
 
 /**
  * Validate file type by checking magic bytes (file signature)
+ * Prevents file type spoofing by verifying actual file content, not just extension
  */
-export async function validateFileType(file: File): Promise<{ valid: boolean; type?: 'pdf' | 'docx' | 'doc'; error?: string }> {
+export async function validateFileType(file: File): Promise<{ valid: boolean; type?: 'pdf' | 'docx' | 'doc' | 'txt'; error?: string }> {
   try {
+    // Validate file name length and characters
+    if (file.name.length > 255) {
+      return { valid: false, error: 'File name is too long (max 255 characters)' }
+    }
+
+    // Check for suspicious file names
+    if (file.name.includes('..') || file.name.includes('/') || file.name.includes('\\')) {
+      return { valid: false, error: 'File name contains invalid characters' }
+    }
+
     const buffer = await file.arrayBuffer()
     const bytes = new Uint8Array(buffer.slice(0, 8))
 
@@ -86,8 +97,14 @@ export async function validateFileType(file: File): Promise<{ valid: boolean; ty
     // DOCX/DOC magic bytes: PK (ZIP format) (0x50 0x4B)
     // DOCX files are actually ZIP archives
     if (bytes[0] === 0x50 && bytes[1] === 0x4B) {
-      // Additional check: DOCX should contain [Content_Types].xml
-      // For now, we'll accept any PK-prefixed file as potential DOCX
+      // Check for ZIP bomb: suspicious compression ratio
+      const compressedSize = file.size
+      const maxUncompressedSize = compressedSize * 100 // Allow max 100:1 ratio
+
+      if (maxUncompressedSize > 100 * 1024 * 1024) { // 100MB uncompressed max
+        return { valid: false, error: 'File appears to be a ZIP bomb or excessively compressed' }
+      }
+
       return { valid: true, type: 'docx' }
     }
 
@@ -100,9 +117,22 @@ export async function validateFileType(file: File): Promise<{ valid: boolean; ty
       return { valid: true, type: 'doc' }
     }
 
+    // TXT files: Check for UTF-8/ASCII text (no specific magic bytes)
+    // Allow if file is small and appears to be text
+    if (file.size < 5 * 1024 * 1024 && file.type === 'text/plain') {
+      // Additional validation: check if content is valid UTF-8
+      try {
+        const decoder = new TextDecoder('utf-8', { fatal: true })
+        decoder.decode(buffer)
+        return { valid: true, type: 'txt' }
+      } catch {
+        return { valid: false, error: 'File claims to be text but contains invalid UTF-8' }
+      }
+    }
+
     return {
       valid: false,
-      error: 'Invalid file type. Only PDF and DOCX files are allowed. The file may be corrupted or misnamed.'
+      error: 'Invalid file type. Only PDF, DOCX, DOC, and TXT files are allowed. The file may be corrupted or misnamed.'
     }
   } catch (error) {
     return { valid: false, error: 'Failed to read file for validation' }

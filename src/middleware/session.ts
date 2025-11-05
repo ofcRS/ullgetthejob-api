@@ -26,21 +26,17 @@ export interface SessionCookieOptions {
 
 export interface SessionPayload {
   id: string
-  token: string
-  refreshToken?: string
   exp: number
+  // SECURITY: OAuth tokens removed from API
+  // Core service is the only source of truth for OAuth tokens
 }
 
 interface CreateSessionOptions {
-  token: string
-  refreshToken?: string
   sessionId?: string
   ttlMs?: number
 }
 
 export function createSession({
-  token,
-  refreshToken,
   sessionId,
   ttlMs
 }: CreateSessionOptions) {
@@ -49,8 +45,6 @@ export function createSession({
 
   const payload: SessionPayload = {
     id,
-    token,
-    refreshToken,
     exp
   }
 
@@ -75,7 +69,7 @@ export async function validateSession(cookieValue?: string, checkDatabase = true
       return { valid: false as const, expired: true as const }
     }
 
-    if (!payload.token || !payload.id) {
+    if (!payload.id) {
       return { valid: false as const }
     }
 
@@ -111,13 +105,15 @@ export async function validateSession(cookieValue?: string, checkDatabase = true
   }
 }
 
-export async function createSessionInDb(sessionId: string, token: string, refreshToken: string | undefined, expiresAt: Date, userId?: string | null, metadata?: { ipAddress?: string; userAgent?: string }) {
+export async function createSessionInDb(sessionId: string, expiresAt: Date, userId?: string | null, metadata?: { ipAddress?: string; userAgent?: string }) {
   try {
     await db.insert(sessions).values({
       sessionId,
       userId: userId ?? null,
-      token,
-      refreshToken: refreshToken ?? null,
+      // SECURITY: OAuth tokens no longer stored in API database
+      // Core service manages all OAuth tokens
+      token: null,
+      refreshToken: null,
       expiresAt,
       ipAddress: metadata?.ipAddress ?? null,
       userAgent: metadata?.userAgent ?? null,

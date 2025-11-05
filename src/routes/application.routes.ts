@@ -47,12 +47,13 @@ export function registerApplicationRoutes() {
       }
 
       try {
+        // SECURITY: Only send session ID, not OAuth token
+        // Core service looks up OAuth token by session ID
         const response = await fetchWithRetry(`${env.CORE_URL}/api/applications/submit`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'X-Core-Secret': env.ORCHESTRATOR_SECRET,
-            Authorization: `Bearer ${session.token}`,
             'X-Session-Id': session.id
           },
           body: JSON.stringify({
@@ -83,8 +84,8 @@ export function registerApplicationRoutes() {
             const mapped: Record<string, string> = {
               missing_email: 'Your CV is missing an email address. Please add one before submitting.',
               missing_phone: 'Your CV is missing a phone number. Please add one before submitting.',
-              missing_resume_id: 'We couldn't determine a resume to submit. Please try again.',
-              resume_not_available: 'Your HH resume isn't available to apply. Please publish and verify it on HH (phone verification may be required), then retry.'
+              missing_resume_id: 'We could not determine a resume to submit. Please try again.',
+              resume_not_available: 'Your HH resume is not available to apply. Please publish and verify it on HH (phone verification may be required), then retry.'
             }
 
             // Special-case HH bad_arguments to surface description when available

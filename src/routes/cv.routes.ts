@@ -65,10 +65,11 @@ export function registerCvRoutes() {
 
       logger.info('CV import from HH.ru started', { userId, hhResumeId: id })
 
+      // SECURITY: Only send session ID, not OAuth token
       const res = await fetchWithRetry(`${env.CORE_URL}/api/hh/resumes/${encodeURIComponent(id)}`, {
         headers: {
-          Authorization: `Bearer ${session.token}`,
-          'X-Session-Id': session.id
+          'X-Session-Id': session.id,
+          'X-Core-Secret': env.ORCHESTRATOR_SECRET
         }
       }, {
         maxRetries: 3,

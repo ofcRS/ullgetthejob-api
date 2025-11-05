@@ -44,9 +44,11 @@ export function registerAuthRoutes() {
       })
       const data: OAuthCallbackResponse = await res.json().catch(() => ({ success: false, error: 'Invalid response from core' }))
 
-      if (res.ok && data?.success && data.tokens?.access_token) {
+      if (res.ok && data?.success) {
+        // SECURITY: OAuth tokens are NOT stored in API
+        // Core service manages tokens and links them to session ID
         let ttlMs: number | undefined
-        const expiresAtRaw = data.tokens.expires_at || data.tokens.expiresAt
+        const expiresAtRaw = data.tokens?.expires_at || data.tokens?.expiresAt
         if (expiresAtRaw) {
           const expiresAtMs = new Date(expiresAtRaw).getTime()
           if (!Number.isNaN(expiresAtMs)) {
@@ -55,8 +57,6 @@ export function registerAuthRoutes() {
         }
 
         const { value, session } = createSession({
-          token: data.tokens.access_token,
-          refreshToken: data.tokens.refresh_token,
           sessionId,
           ttlMs
         })
@@ -71,6 +71,8 @@ export function registerAuthRoutes() {
 
         data.connected = true
         data.session_id = session.id
+
+        logger.info('Session created after OAuth', { sessionId: session.id })
       } else if (res.status === 401 || res.status === 403) {
         set.headers['Set-Cookie'] = serializeSessionCookie('', {
           maxAge: 0,
@@ -97,10 +99,12 @@ export function registerAuthRoutes() {
       }
 
       try {
+        // SECURITY: Only send session ID, not OAuth token
+        // Core service looks up token by session ID
         const res = await fetchWithRetry(`${CORE_URL}/api/hh/status`, {
           headers: {
-            Authorization: `Bearer ${validation.session.token}`,
-            'X-Session-Id': validation.session.id
+            'X-Session-Id': validation.session.id,
+            'X-Core-Secret': env.ORCHESTRATOR_SECRET
           }
         }, {
           maxRetries: 2,
@@ -136,10 +140,11 @@ export function registerAuthRoutes() {
       }
 
       try {
+        // SECURITY: Only send session ID, not OAuth token
         const res = await fetchWithRetry(`${CORE_URL}/api/hh/resumes`, {
           headers: {
-            Authorization: `Bearer ${validation.session.token}`,
-            'X-Session-Id': validation.session.id
+            'X-Session-Id': validation.session.id,
+            'X-Core-Secret': env.ORCHESTRATOR_SECRET
           }
         }, {
           maxRetries: 3,
@@ -174,10 +179,11 @@ export function registerAuthRoutes() {
       }
 
       try {
+        // SECURITY: Only send session ID, not OAuth token
         const res = await fetchWithRetry(`${CORE_URL}/api/hh/resumes/${encodeURIComponent(id)}`, {
           headers: {
-            Authorization: `Bearer ${validation.session.token}`,
-            'X-Session-Id': validation.session.id
+            'X-Session-Id': validation.session.id,
+            'X-Core-Secret': env.ORCHESTRATOR_SECRET
           }
         }, {
           maxRetries: 3,
