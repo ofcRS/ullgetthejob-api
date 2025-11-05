@@ -18,8 +18,7 @@ export interface Session {
   id: string
   sessionId: string
   userId: string | null
-  token: string
-  refreshToken: string | null
+  token: string // JWT from Core (not OAuth tokens)
   expiresAt: Date
   revokedAt: Date | null
   lastActivityAt: Date
@@ -138,8 +137,7 @@ export interface ValidationResult {
 
 export interface SessionPayload {
   id: string
-  token: string
-  refreshToken?: string
+  token: string // JWT from Core
   exp: number
 }
 
@@ -165,8 +163,7 @@ export interface SessionValidationSuccess {
 export type SessionValidation = SessionValidationResult | SessionValidationSuccess
 
 export interface CreateSessionOptions {
-  token: string
-  refreshToken?: string
+  token: string // JWT from Core
   sessionId?: string
   ttlMs?: number
 }
@@ -288,7 +285,8 @@ export interface OAuthTokens {
 
 export interface OAuthCallbackResponse {
   success: boolean
-  tokens?: OAuthTokens
+  tokens?: OAuthTokens // Deprecated: Core now returns jwt instead
+  jwt?: string // JWT token from Core (replaces OAuth tokens)
   error?: string
   connected?: boolean
   session_id?: string

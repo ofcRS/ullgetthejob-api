@@ -11,7 +11,8 @@ export const env = {
   JWT_SECRET: get('JWT_SECRET', 'dev_jwt_secret'),
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN ?? '7d',
   OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY ?? '',
-  HH_ACCESS_TOKEN: get('HH_ACCESS_TOKEN', ''),
+  // HH_ACCESS_TOKEN is deprecated - OAuth tokens are now managed by Core service
+  // Remove this from your .env file
   ORCHESTRATOR_SECRET: get('ORCHESTRATOR_SECRET', 'dev_orchestrator_secret'),
   CORE_URL: get('CORE_URL', 'http://localhost:4000'),
   SESSION_SECRET: get('SESSION_SECRET'),

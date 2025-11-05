@@ -2,7 +2,7 @@ import { Elysia } from 'elysia'
 import { randomUUID } from 'node:crypto'
 import { env } from '../config/env'
 import { createSession, validateSession, extractSessionCookie, serializeSessionCookie } from '../middleware/session'
-import { fetchWithRetry } from '../utils/retry'
+import { proxyToCore } from '../services/core.proxy'
 import { logger } from '../utils/logger'
 import type { OAuthCallbackQuery, OAuthCallbackResponse } from '../types'
 
@@ -12,9 +12,14 @@ const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
 export function registerAuthRoutes() {
   return new Elysia({ name: 'auth-routes' })
     .get('/api/auth/hh/login', async () => {
-      const res = await fetchWithRetry(`${CORE_URL}/auth/hh/redirect`, {}, {
-        maxRetries: 2,
-        retryableStatuses: [502, 503, 504]
+      const res = await proxyToCore({
+        path: '/auth/hh/redirect',
+        method: 'GET',
+        skipSigning: true,
+        retryOptions: {
+          maxRetries: 2,
+          retryableStatuses: [502, 503, 504]
+        }
       })
       return await res.json()
     })
@@ -35,28 +40,27 @@ export function registerAuthRoutes() {
       callbackUrl.searchParams.set('code', code)
       callbackUrl.searchParams.set('session_id', sessionId)
 
-      const res = await fetchWithRetry(callbackUrl.toString(), {}, {
-        maxRetries: 2,
-        retryableStatuses: [502, 503, 504],
-        onRetry: (attempt) => {
-          logger.warn('Retrying OAuth callback', { attempt, sessionId })
+      const res = await proxyToCore({
+        path: `/auth/hh/callback?code=${encodeURIComponent(code)}&session_id=${sessionId}`,
+        method: 'GET',
+        skipSigning: true,
+        retryOptions: {
+          maxRetries: 2,
+          retryableStatuses: [502, 503, 504],
+          onRetry: (attempt) => {
+            logger.warn('Retrying OAuth callback', { attempt, sessionId })
+          }
         }
       })
       const data: OAuthCallbackResponse = await res.json().catch(() => ({ success: false, error: 'Invalid response from core' }))
 
-      if (res.ok && data?.success && data.tokens?.access_token) {
-        let ttlMs: number | undefined
-        const expiresAtRaw = data.tokens.expires_at || data.tokens.expiresAt
-        if (expiresAtRaw) {
-          const expiresAtMs = new Date(expiresAtRaw).getTime()
-          if (!Number.isNaN(expiresAtMs)) {
-            ttlMs = Math.max(expiresAtMs - Date.now(), 60_000)
-          }
-        }
+      // Core now returns a JWT instead of OAuth tokens
+      if (res.ok && data?.success && data.jwt) {
+        // JWT typically has a standard expiration time (7 days default)
+        const ttlMs = 7 * 24 * 60 * 60 * 1000 // 7 days
 
         const { value, session } = createSession({
-          token: data.tokens.access_token,
-          refreshToken: data.tokens.refresh_token,
+          token: data.jwt,
           sessionId,
           ttlMs
         })
@@ -97,14 +101,16 @@ export function registerAuthRoutes() {
       }
 
       try {
-        const res = await fetchWithRetry(`${CORE_URL}/api/hh/status`, {
-          headers: {
-            Authorization: `Bearer ${validation.session.token}`,
-            'X-Session-Id': validation.session.id
+        const res = await proxyToCore({
+          path: '/api/hh/status',
+          method: 'GET',
+          token: validation.session.token,
+          sessionId: validation.session.id,
+          skipSigning: true,
+          retryOptions: {
+            maxRetries: 2,
+            retryableStatuses: [502, 503, 504]
           }
-        }, {
-          maxRetries: 2,
-          retryableStatuses: [502, 503, 504]
         })
 
         if (!res.ok) {
@@ -136,14 +142,16 @@ export function registerAuthRoutes() {
       }
 
       try {
-        const res = await fetchWithRetry(`${CORE_URL}/api/hh/resumes`, {
-          headers: {
-            Authorization: `Bearer ${validation.session.token}`,
-            'X-Session-Id': validation.session.id
+        const res = await proxyToCore({
+          path: '/api/hh/resumes',
+          method: 'GET',
+          token: validation.session.token,
+          sessionId: validation.session.id,
+          skipSigning: true,
+          retryOptions: {
+            maxRetries: 3,
+            retryableStatuses: [502, 503, 504]
           }
-        }, {
-          maxRetries: 3,
-          retryableStatuses: [502, 503, 504]
         })
 
         if (res.status === 401 || res.status === 403) {
@@ -174,14 +182,16 @@ export function registerAuthRoutes() {
       }
 
       try {
-        const res = await fetchWithRetry(`${CORE_URL}/api/hh/resumes/${encodeURIComponent(id)}`, {
-          headers: {
-            Authorization: `Bearer ${validation.session.token}`,
-            'X-Session-Id': validation.session.id
+        const res = await proxyToCore({
+          path: `/api/hh/resumes/${encodeURIComponent(id)}`,
+          method: 'GET',
+          token: validation.session.token,
+          sessionId: validation.session.id,
+          skipSigning: true,
+          retryOptions: {
+            maxRetries: 3,
+            retryableStatuses: [502, 503, 504]
           }
-        }, {
-          maxRetries: 3,
-          retryableStatuses: [502, 503, 504]
         })
 
         if (res.status === 401 || res.status === 403) {

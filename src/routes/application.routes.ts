@@ -1,8 +1,7 @@
 import { Elysia, t } from 'elysia'
-import { env } from '../config/env'
 import { authMiddleware } from '../middleware/auth'
 import { validateEmail, validateRussianPhone } from '../utils/validation'
-import { fetchWithRetry } from '../utils/retry'
+import { proxyToCore } from '../services/core.proxy'
 import { logger } from '../utils/logger'
 import type { ApplicationSubmitRequest, CustomizedCV } from '../types'
 
@@ -47,25 +46,22 @@ export function registerApplicationRoutes() {
       }
 
       try {
-        const response = await fetchWithRetry(`${env.CORE_URL}/api/applications/submit`, {
+        const response = await proxyToCore({
+          path: '/api/applications/submit',
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Core-Secret': env.ORCHESTRATOR_SECRET,
-            Authorization: `Bearer ${session.token}`,
-            'X-Session-Id': session.id
-          },
-          body: JSON.stringify({
-            user_id: session.id,
+          body: {
             job_external_id: jobExternalId,
             customized_cv: sanitizedCV,
             cover_letter: coverLetter
-          })
-        }, {
-          maxRetries: 2,
-          retryableStatuses: [502, 503, 504],
-          onRetry: (attempt, error) => {
-            logger.warn('Retrying application submission', { attempt, userId, jobExternalId, error: error.message })
+          },
+          token: session.token,
+          sessionId: session.id,
+          retryOptions: {
+            maxRetries: 2,
+            retryableStatuses: [502, 503, 504],
+            onRetry: (attempt, error) => {
+              logger.warn('Retrying application submission', { attempt, userId, jobExternalId, error: error.message })
+            }
           }
         })
 
@@ -83,8 +79,8 @@ export function registerApplicationRoutes() {
             const mapped: Record<string, string> = {
               missing_email: 'Your CV is missing an email address. Please add one before submitting.',
               missing_phone: 'Your CV is missing a phone number. Please add one before submitting.',
-              missing_resume_id: 'We couldn't determine a resume to submit. Please try again.',
-              resume_not_available: 'Your HH resume isn't available to apply. Please publish and verify it on HH (phone verification may be required), then retry.'
+              missing_resume_id: 'We could not determine a resume to submit. Please try again.',
+              resume_not_available: 'Your HH resume is not available to apply. Please publish and verify it on HH (phone verification may be required), then retry.'
             }
 
             // Special-case HH bad_arguments to surface description when available
