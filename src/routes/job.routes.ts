@@ -1,16 +1,11 @@
 import { Elysia, t } from 'elysia'
 import { env } from '../config/env'
+import type { JobSearchRequest } from '../types'
 
 export function registerJobRoutes() {
   return new Elysia({ name: 'job-routes' })
     .post('/api/jobs/search', async ({ body, set }) => {
-      const { text, area, experience, employment, schedule } = body as {
-        text: string
-        area?: string
-        experience?: string
-        employment?: string
-        schedule?: string
-      }
+      const { text, area, experience, employment, schedule } = body as JobSearchRequest
 
       const response = await fetch(`${env.CORE_URL}/api/jobs/search`, {
         method: 'POST',

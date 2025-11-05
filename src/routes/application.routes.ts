@@ -1,18 +1,16 @@
 import { Elysia, t } from 'elysia'
 import { env } from '../config/env'
 import { validateSession, extractSessionCookie, serializeSessionCookie } from '../middleware/session'
+import { validateEmail, validateRussianPhone } from '../utils/validation'
+import type { ApplicationSubmitRequest, CustomizedCV } from '../types'
 
 export function registerApplicationRoutes() {
   return new Elysia({ name: 'application-routes' })
     .post('/api/application/submit', async ({ body, set, request }) => {
-      const { jobExternalId, customizedCV, coverLetter } = body as {
-        jobExternalId: string
-        customizedCV: any
-        coverLetter: string
-      }
+      const { jobExternalId, customizedCV, coverLetter } = body as ApplicationSubmitRequest
 
       const cookieValue = extractSessionCookie(request.headers.get('cookie'))
-      const sessionValidation = validateSession(cookieValue)
+      const sessionValidation = await validateSession(cookieValue)
       if (!sessionValidation.valid || !sessionValidation.session) {
         set.status = 401
         set.headers['Set-Cookie'] = serializeSessionCookie('', {
@@ -31,24 +29,31 @@ export function registerApplicationRoutes() {
         return { success: false, error: 'Missing job data for submission' }
       }
 
-      const email = typeof customizedCV.email === 'string' ? customizedCV.email.trim() : ''
-      const phoneRaw = typeof customizedCV.phone === 'string' ? customizedCV.phone.trim() : ''
-      const phoneDigits = phoneRaw.replace(/[^\d]/g, '')
-
-      if (!email || !email.includes('@')) {
+      // Validate email
+      const email = typeof customizedCV.email === 'string' ? customizedCV.email : ''
+      const emailValidation = validateEmail(email)
+      if (!emailValidation.valid) {
         set.status = 400
-        return { success: false, error: 'Your CV needs a valid email address before you can submit. Please edit the CV details.' }
+        return { success: false, error: emailValidation.error || 'Invalid email address' }
       }
 
-      if (!phoneDigits || phoneDigits.length < 7) {
+      // Validate phone number
+      const phone = typeof customizedCV.phone === 'string' ? customizedCV.phone : ''
+      const phoneValidation = validateRussianPhone(phone)
+      if (!phoneValidation.valid) {
         set.status = 400
-        return { success: false, error: 'Your CV needs a valid phone number before you can submit. Please edit the CV details.' }
+        return { success: false, error: phoneValidation.error || 'Invalid phone number' }
+      }
+
+      // Use formatted phone number
+      if (phoneValidation.formatted) {
+        customizedCV.phone = phoneValidation.formatted
       }
 
       // Sanitize CV: drop blank hh_resume_id to avoid short-circuiting with empty id in Core
-      const sanitizedCV = { ...(customizedCV as any) }
-      if (typeof (sanitizedCV as any)?.hh_resume_id === 'string' && (sanitizedCV as any).hh_resume_id.trim() === '') {
-        delete (sanitizedCV as any).hh_resume_id
+      const sanitizedCV = { ...customizedCV } as CustomizedCV & { hh_resume_id?: string }
+      if (typeof sanitizedCV.hh_resume_id === 'string' && sanitizedCV.hh_resume_id.trim() === '') {
+        delete sanitizedCV.hh_resume_id
       }
 
       const response = await fetch(`${env.CORE_URL}/api/applications/submit`, {

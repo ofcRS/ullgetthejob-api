@@ -4,19 +4,32 @@ import { StorageService } from '../services/storage.service'
 import { aiService } from '../services/ai.service'
 import { env } from '../config/env'
 import { validateSession, extractSessionCookie, serializeSessionCookie } from '../middleware/session'
+import { validateFileSize, validateFileType } from '../utils/validation'
+import type { CVUploadRequest, CVCustomizeRequest, ParsedCV } from '../types'
 
 const storage = new StorageService()
 
 export function registerCvRoutes() {
   return new Elysia({ name: 'cv-routes' })
-    .post('/api/cv/upload', async ({ body }) => {
-      const file = (body as any).file as File
-      const clientId = (body as any).clientId as string | undefined
-      if (!file) throw new Error('No file provided')
+    .post('/api/cv/upload', async ({ body, set }) => {
+      const { file, clientId } = body as CVUploadRequest
+      if (!file) {
+        set.status = 400
+        return { success: false, error: 'No file provided' }
+      }
 
-      const allowed = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
-      if (!allowed.includes(file.type) && !file.name.match(/\.(pdf|doc|docx)$/i)) {
-        throw new Error('Invalid file type. Please upload PDF or DOCX')
+      // Validate file size
+      const sizeValidation = validateFileSize(file, env.MAX_FILE_SIZE)
+      if (!sizeValidation.valid) {
+        set.status = 400
+        return { success: false, error: sizeValidation.error }
+      }
+
+      // Validate file type using magic bytes
+      const typeValidation = await validateFileType(file)
+      if (!typeValidation.valid) {
+        set.status = 400
+        return { success: false, error: typeValidation.error }
       }
 
       const parsed = await cvParserService.parseCV(file, (stage) => {
@@ -40,9 +53,9 @@ export function registerCvRoutes() {
       body: t.Object({ file: t.File(), clientId: t.Optional(t.String()) })
     })
     .post('/api/cv/import/hh/:id', async ({ params, request, set }) => {
-      const id = (params as any).id as string
+      const { id } = params as { id: string }
       const cookieValue = extractSessionCookie(request.headers.get('cookie'))
-      const sessionValidation = validateSession(cookieValue)
+      const sessionValidation = await validateSession(cookieValue)
 
       if (!sessionValidation.valid || !sessionValidation.session) {
         set.status = 401
@@ -101,15 +114,18 @@ export function registerCvRoutes() {
     })
     .post('/api/cv/customize', async ({ body, set }) => {
       try {
-        const { cv, jobDescription, model } = body as { cv: any; jobDescription: string; model?: string }
+        const { cv, jobDescription, model } = body as CVCustomizeRequest
         if (!cv || !jobDescription) {
           set.status = 400
           return { success: false, error: 'Missing CV or job description' }
         }
 
-        const customizedCV = await aiService.customizeCV(cv, jobDescription, model)
-        const coverLetter = await aiService.generateCoverLetter(customizedCV, jobDescription, 'Company', model)
+        // Extract job skills once and reuse to avoid duplicate AI calls
         const jobSkills = await aiService.extractJobSkills(jobDescription)
+
+        // Pass pre-extracted skills to customizeCV to prevent redundant extraction
+        const customizedCV = await aiService.customizeCV(cv, jobDescription, model, jobSkills)
+        const coverLetter = await aiService.generateCoverLetter(customizedCV, jobDescription, 'Company', model)
 
         return { success: true, customizedCV, coverLetter, modelUsed: model || 'anthropic/claude-3.5-sonnet', jobSkills }
       } catch (error) {
