@@ -111,16 +111,16 @@ export async function validateSession(cookieValue?: string, checkDatabase = true
   }
 }
 
-export async function createSessionInDb(sessionId: string, token: string, refreshToken: string | undefined, expiresAt: Date, userId?: string, metadata?: { ipAddress?: string; userAgent?: string }) {
+export async function createSessionInDb(sessionId: string, token: string, refreshToken: string | undefined, expiresAt: Date, userId?: string | null, metadata?: { ipAddress?: string; userAgent?: string }) {
   try {
     await db.insert(sessions).values({
       sessionId,
-      userId: userId as any,
+      userId: userId ?? null,
       token,
-      refreshToken,
+      refreshToken: refreshToken ?? null,
       expiresAt,
-      ipAddress: metadata?.ipAddress,
-      userAgent: metadata?.userAgent,
+      ipAddress: metadata?.ipAddress ?? null,
+      userAgent: metadata?.userAgent ?? null,
       createdAt: new Date(),
       updatedAt: new Date()
     })
@@ -149,7 +149,7 @@ export async function revokeAllUserSessions(userId: string) {
       .update(sessions)
       .set({ revokedAt: new Date(), updatedAt: new Date() })
       .where(and(
-        eq(sessions.userId, userId as any),
+        eq(sessions.userId, userId),
         isNull(sessions.revokedAt)
       ))
     return true
