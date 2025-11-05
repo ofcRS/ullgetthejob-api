@@ -2,6 +2,7 @@ import { Elysia } from 'elysia'
 import { randomUUID } from 'node:crypto'
 import { env } from '../config/env'
 import { createSession, validateSession, extractSessionCookie, serializeSessionCookie } from '../middleware/session'
+import type { OAuthCallbackQuery, OAuthCallbackResponse } from '../types'
 
 const CORE_URL = env.CORE_URL
 const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
@@ -13,7 +14,7 @@ export function registerAuthRoutes() {
       return await res.json()
     })
     .get('/api/auth/hh/callback', async ({ query, request, set }) => {
-      const code = (query as any)?.code as string | undefined
+      const { code } = query as OAuthCallbackQuery
       if (!code) {
         set.status = 400
         return { success: false, error: 'Missing code' }
@@ -30,7 +31,7 @@ export function registerAuthRoutes() {
       callbackUrl.searchParams.set('session_id', sessionId)
 
       const res = await fetch(callbackUrl.toString())
-      const data = await res.json().catch(() => ({ success: false, error: 'Invalid response from core' }))
+      const data: OAuthCallbackResponse = await res.json().catch(() => ({ success: false, error: 'Invalid response from core' }))
 
       if (res.ok && data?.success && data.tokens?.access_token) {
         let ttlMs: number | undefined
@@ -146,7 +147,7 @@ export function registerAuthRoutes() {
       }
     })
     .get('/api/hh/resumes/:id', async ({ params, request, set }) => {
-      const id = (params as any).id
+      const { id } = params as { id: string }
       const cookieValue = extractSessionCookie(request.headers.get('cookie'))
       const validation = await validateSession(cookieValue)
 

@@ -1,41 +1,13 @@
 import { env } from '../config/env'
 import { sanitizeTextInput, validateTextLength } from '../utils/validation'
-
-interface ParsedCV {
-  firstName?: string
-  lastName?: string
-  email?: string
-  phone?: string
-  title?: string
-  summary?: string
-  experience?: string
-  education?: string
-  skills?: string[]
-  projects?: string
-  fullText: string
-}
-
-interface CustomizedCV {
-  email?: string
-  phone?: string
-  experience?: string
-  education?: string
-  skills?: string[]
-  projects?: string
-  firstName?: string
-  lastName?: string
-  title?: string
-  birthDate?: string
-  area?: string
-  summary?: string
-}
+import type { ParsedCV, CustomizedCV, JobSkills, AIModelInfo } from '../types'
 
 export class AIService {
   private openRouterKey = env.OPENROUTER_API_KEY
   private baseURL = 'https://openrouter.ai/api/v1/chat/completions'
   private defaultModel = 'anthropic/claude-3.5-sonnet'
 
-  async extractJobSkills(jobDescription: string): Promise<any> {
+  async extractJobSkills(jobDescription: string): Promise<JobSkills> {
     // Validate job description length
     const lengthValidation = validateTextLength(jobDescription, 200, 10000, 'Job description')
     if (!lengthValidation.valid) {
@@ -103,7 +75,7 @@ Rules:
     originalCV: ParsedCV,
     jobDescription: string,
     model?: string,
-    preExtractedSkills?: any
+    preExtractedSkills?: JobSkills
   ): Promise<CustomizedCV> {
     const selectedModel = model || this.defaultModel
 
@@ -348,7 +320,7 @@ ${cv.firstName || ''} ${cv.lastName || ''}`
 export const aiService = new AIService()
 
 // Available models for selection
-export const AVAILABLE_MODELS = [
+export const AVAILABLE_MODELS: AIModelInfo[] = [
   { 
     id: 'anthropic/claude-3.5-sonnet', 
     name: 'Claude 3.5 Sonnet', 
