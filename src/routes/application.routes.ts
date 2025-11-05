@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia'
 import { env } from '../config/env'
 import { authMiddleware } from '../middleware/auth'
 import { validateEmail, validateRussianPhone } from '../utils/validation'
+import { fetchWithRetry } from '../utils/retry'
 import { logger } from '../utils/logger'
 import type { ApplicationSubmitRequest, CustomizedCV } from '../types'
 
@@ -46,7 +47,7 @@ export function registerApplicationRoutes() {
       }
 
       try {
-        const response = await fetch(`${env.CORE_URL}/api/applications/submit`, {
+        const response = await fetchWithRetry(`${env.CORE_URL}/api/applications/submit`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -60,6 +61,12 @@ export function registerApplicationRoutes() {
             customized_cv: sanitizedCV,
             cover_letter: coverLetter
           })
+        }, {
+          maxRetries: 2,
+          retryableStatuses: [502, 503, 504],
+          onRetry: (attempt, error) => {
+            logger.warn('Retrying application submission', { attempt, userId, jobExternalId, error: error.message })
+          }
         })
 
         if (!response.ok) {

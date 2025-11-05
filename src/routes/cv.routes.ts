@@ -5,6 +5,7 @@ import { aiService } from '../services/ai.service'
 import { env } from '../config/env'
 import { authMiddleware, optionalAuthMiddleware, checkResourceOwnership } from '../middleware/auth'
 import { validateFileSize, validateFileType } from '../utils/validation'
+import { fetchWithRetry } from '../utils/retry'
 import { logger } from '../utils/logger'
 import type { CVUploadRequest, CVCustomizeRequest, ParsedCV, AuthContext } from '../types'
 
@@ -64,10 +65,16 @@ export function registerCvRoutes() {
 
       logger.info('CV import from HH.ru started', { userId, hhResumeId: id })
 
-      const res = await fetch(`${env.CORE_URL}/api/hh/resumes/${encodeURIComponent(id)}`, {
+      const res = await fetchWithRetry(`${env.CORE_URL}/api/hh/resumes/${encodeURIComponent(id)}`, {
         headers: {
           Authorization: `Bearer ${session.token}`,
           'X-Session-Id': session.id
+        }
+      }, {
+        maxRetries: 3,
+        retryableStatuses: [502, 503, 504],
+        onRetry: (attempt, error) => {
+          logger.warn('Retrying HH resume fetch', { attempt, userId, hhResumeId: id, error: error.message })
         }
       })
 
