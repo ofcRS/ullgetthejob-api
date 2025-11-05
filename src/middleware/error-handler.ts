@@ -28,7 +28,6 @@ export function errorHandler() {
       if (code === 'VALIDATION') {
         set.status = 400
 
-        const validationError = error as any
         const response: ErrorResponse = {
           success: false,
           error: 'Validation failed',
@@ -36,6 +35,11 @@ export function errorHandler() {
         }
 
         // Extract detailed validation information if available
+        const validationError = error as Error & {
+          all?: unknown
+          path?: string
+        }
+
         if (validationError.all) {
           response.details = validationError.all
         } else if (validationError.message) {
