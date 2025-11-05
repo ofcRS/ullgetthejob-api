@@ -1,6 +1,5 @@
 import { Elysia, t } from 'elysia'
-import { env } from '../config/env'
-import { fetchWithRetry } from '../utils/retry'
+import { proxyToCore } from '../services/core.proxy'
 import { logger } from '../utils/logger'
 import type { JobSearchRequest } from '../types'
 
@@ -11,18 +10,16 @@ export function registerJobRoutes() {
 
       logger.debug('Job search request', { text, area })
 
-      const response = await fetchWithRetry(`${env.CORE_URL}/api/jobs/search`, {
+      const response = await proxyToCore({
+        path: '/api/jobs/search',
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Core-Secret': env.ORCHESTRATOR_SECRET
-        },
-        body: JSON.stringify({ text, area, experience, employment, schedule })
-      }, {
-        maxRetries: 3,
-        retryableStatuses: [502, 503, 504],
-        onRetry: (attempt, error) => {
-          logger.warn('Retrying job search', { attempt, error: error.message })
+        body: { text, area, experience, employment, schedule },
+        retryOptions: {
+          maxRetries: 3,
+          retryableStatuses: [502, 503, 504],
+          onRetry: (attempt, error) => {
+            logger.warn('Retrying job search', { attempt, error: error.message })
+          }
         }
       })
 
@@ -48,15 +45,15 @@ export function registerJobRoutes() {
 
       logger.debug('Fetching job details', { jobId: id })
 
-      const response = await fetchWithRetry(`${env.CORE_URL}/api/jobs/${encodeURIComponent(id)}`, {
-        headers: {
-          'X-Core-Secret': env.ORCHESTRATOR_SECRET
-        }
-      }, {
-        maxRetries: 3,
-        retryableStatuses: [502, 503, 504],
-        onRetry: (attempt, error) => {
-          logger.warn('Retrying job fetch', { attempt, jobId: id, error: error.message })
+      const response = await proxyToCore({
+        path: `/api/jobs/${encodeURIComponent(id)}`,
+        method: 'GET',
+        retryOptions: {
+          maxRetries: 3,
+          retryableStatuses: [502, 503, 504],
+          onRetry: (attempt, error) => {
+            logger.warn('Retrying job fetch', { attempt, jobId: id, error: error.message })
+          }
         }
       })
 

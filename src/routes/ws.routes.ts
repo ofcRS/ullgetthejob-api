@@ -1,17 +1,42 @@
 import { Elysia, t } from 'elysia'
 import { env } from '../config/env'
 import { realtime } from '../services/realtime.service'
+import { validateSession, extractSessionCookie } from '../middleware/session'
+import { logger } from '../utils/logger'
 
 const wsClients = new Set<any>()
 
 export function registerWsRoutes() {
   return new Elysia({ name: 'ws-routes' })
     .ws('/ws', {
-      open(ws) {
+      async open(ws) {
+        // Extract and validate session from cookie header
+        const cookieHeader = ws.data.headers?.get?.('cookie') ?? ws.data.headers?.cookie
+        const cookieValue = extractSessionCookie(cookieHeader)
+        const validation = await validateSession(cookieValue, false)
+
+        if (!validation.valid || !validation.session) {
+          logger.warn('WebSocket connection rejected - invalid session')
+          ws.close(1008, 'Authentication required')
+          return
+        }
+
+        // Store user ID in WebSocket data for later use
+        ws.data.userId = validation.session.id
+        ws.data.sessionId = validation.session.id
+
         wsClients.add(ws.raw)
+        logger.info('WebSocket connection authenticated', { userId: validation.session.id })
+
         try {
-          ws.send(JSON.stringify({ type: 'connected', message: 'Ready to receive job updates' }))
-        } catch {}
+          ws.send(JSON.stringify({
+            type: 'connected',
+            message: 'Ready to receive job updates',
+            userId: validation.session.id
+          }))
+        } catch (error) {
+          logger.error('Failed to send welcome message', error as Error)
+        }
       },
       message(ws, message) {
         try {

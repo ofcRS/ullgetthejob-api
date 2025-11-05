@@ -26,21 +26,18 @@ export interface SessionCookieOptions {
 
 export interface SessionPayload {
   id: string
-  token: string
-  refreshToken?: string
+  token: string // JWT from Core
   exp: number
 }
 
 interface CreateSessionOptions {
-  token: string
-  refreshToken?: string
+  token: string // JWT from Core
   sessionId?: string
   ttlMs?: number
 }
 
 export function createSession({
   token,
-  refreshToken,
   sessionId,
   ttlMs
 }: CreateSessionOptions) {
@@ -50,7 +47,6 @@ export function createSession({
   const payload: SessionPayload = {
     id,
     token,
-    refreshToken,
     exp
   }
 
@@ -111,13 +107,12 @@ export async function validateSession(cookieValue?: string, checkDatabase = true
   }
 }
 
-export async function createSessionInDb(sessionId: string, token: string, refreshToken: string | undefined, expiresAt: Date, userId?: string | null, metadata?: { ipAddress?: string; userAgent?: string }) {
+export async function createSessionInDb(sessionId: string, token: string, expiresAt: Date, userId?: string | null, metadata?: { ipAddress?: string; userAgent?: string }) {
   try {
     await db.insert(sessions).values({
       sessionId,
       userId: userId ?? null,
-      token,
-      refreshToken: refreshToken ?? null,
+      token, // JWT from Core
       expiresAt,
       ipAddress: metadata?.ipAddress ?? null,
       userAgent: metadata?.userAgent ?? null,

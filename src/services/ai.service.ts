@@ -1,5 +1,7 @@
 import { env } from '../config/env'
 import { sanitizeTextInput, validateTextLength } from '../utils/validation'
+import { cache } from './cache.service'
+import { hashString } from '../utils/crypto'
 import type { ParsedCV, CustomizedCV, JobSkills, AIModelInfo } from '../types'
 
 export class AIService {
@@ -16,6 +18,13 @@ export class AIService {
 
     // Sanitize input to prevent prompt injection
     const sanitizedDescription = sanitizeTextInput(jobDescription, 10000)
+
+    // Check cache first
+    const cacheKey = `skills:${hashString(sanitizedDescription)}`
+    const cached = cache.get<JobSkills>(cacheKey)
+    if (cached) {
+      return cached
+    }
 
     const prompt = `
 Extract technical requirements from this job description.
@@ -68,7 +77,12 @@ Rules:
     const data = await response.json()
     const content = data.choices?.[0]?.message?.content as string | undefined
     const jsonMatch = content?.match(/\{[\s\S]*\}/)
-    return jsonMatch ? JSON.parse(jsonMatch[0]) : { required: [], preferred: [], tools: [], frameworks: [], categories: {} }
+    const skills = jsonMatch ? JSON.parse(jsonMatch[0]) : { required: [], preferred: [], tools: [], frameworks: [], categories: {} }
+
+    // Cache the result for 24 hours
+    cache.set(cacheKey, skills, 86400000)
+
+    return skills
   }
 
   async customizeCV(

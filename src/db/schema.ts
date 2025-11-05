@@ -118,8 +118,7 @@ export const sessions = pgTable('sessions', {
   id: uuid('id').primaryKey().defaultRandom(),
   sessionId: varchar('session_id', { length: 255 }).notNull().unique(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
-  token: text('token').notNull(),
-  refreshToken: text('refresh_token'),
+  token: text('token').notNull(), // JWT from Core (not OAuth tokens)
   expiresAt: timestamp('expires_at').notNull(),
   revokedAt: timestamp('revoked_at'),
   lastActivityAt: timestamp('last_activity_at').defaultNow(),
