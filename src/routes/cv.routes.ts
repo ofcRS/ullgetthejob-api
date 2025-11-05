@@ -161,7 +161,22 @@ export function registerCvRoutes() {
         return { success: false, error: error instanceof Error ? error.message : 'Customization failed' }
       }
     }, {
-      body: t.Object({ cv: t.Any(), jobDescription: t.String(), model: t.Optional(t.String()) })
+      body: t.Object({
+        cv: t.Object({
+          firstName: t.Optional(t.String()),
+          lastName: t.Optional(t.String()),
+          email: t.Optional(t.String()),
+          phone: t.Optional(t.String()),
+          title: t.Optional(t.String()),
+          summary: t.Optional(t.String()),
+          experience: t.Optional(t.String()),
+          education: t.Optional(t.String()),
+          skills: t.Optional(t.Array(t.String())),
+          projects: t.Optional(t.String())
+        }),
+        jobDescription: t.String({ minLength: 10 }),
+        model: t.Optional(t.String())
+      })
     })
 }
 

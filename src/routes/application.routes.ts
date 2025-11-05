@@ -128,9 +128,24 @@ export function registerApplicationRoutes() {
       }
     }, {
       body: t.Object({
-        jobExternalId: t.String(),
-        customizedCV: t.Any(),
-        coverLetter: t.String()
+        jobExternalId: t.String({ minLength: 1 }),
+        customizedCV: t.Object({
+          firstName: t.Optional(t.String()),
+          lastName: t.Optional(t.String()),
+          email: t.Optional(t.String()),
+          phone: t.Optional(t.String()),
+          title: t.Optional(t.String()),
+          summary: t.Optional(t.String()),
+          experience: t.Optional(t.String()),
+          education: t.Optional(t.String()),
+          skills: t.Optional(t.Array(t.String())),
+          projects: t.Optional(t.String()),
+          birthDate: t.Optional(t.String()),
+          area: t.Optional(t.String()),
+          matchedSkills: t.Optional(t.Array(t.String())),
+          addedKeywords: t.Optional(t.Array(t.String()))
+        }),
+        coverLetter: t.String({ minLength: 1 })
       })
     })
 }
