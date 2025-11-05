@@ -2,15 +2,12 @@ import { Elysia, t } from 'elysia'
 import { env } from '../config/env'
 import { validateSession, extractSessionCookie, serializeSessionCookie } from '../middleware/session'
 import { validateEmail, validateRussianPhone } from '../utils/validation'
+import type { ApplicationSubmitRequest, CustomizedCV } from '../types'
 
 export function registerApplicationRoutes() {
   return new Elysia({ name: 'application-routes' })
     .post('/api/application/submit', async ({ body, set, request }) => {
-      const { jobExternalId, customizedCV, coverLetter } = body as {
-        jobExternalId: string
-        customizedCV: any
-        coverLetter: string
-      }
+      const { jobExternalId, customizedCV, coverLetter } = body as ApplicationSubmitRequest
 
       const cookieValue = extractSessionCookie(request.headers.get('cookie'))
       const sessionValidation = await validateSession(cookieValue)
@@ -54,9 +51,9 @@ export function registerApplicationRoutes() {
       }
 
       // Sanitize CV: drop blank hh_resume_id to avoid short-circuiting with empty id in Core
-      const sanitizedCV = { ...(customizedCV as any) }
-      if (typeof (sanitizedCV as any)?.hh_resume_id === 'string' && (sanitizedCV as any).hh_resume_id.trim() === '') {
-        delete (sanitizedCV as any).hh_resume_id
+      const sanitizedCV = { ...customizedCV } as CustomizedCV & { hh_resume_id?: string }
+      if (typeof sanitizedCV.hh_resume_id === 'string' && sanitizedCV.hh_resume_id.trim() === '') {
+        delete sanitizedCV.hh_resume_id
       }
 
       const response = await fetch(`${env.CORE_URL}/api/applications/submit`, {

@@ -5,14 +5,14 @@ import { aiService } from '../services/ai.service'
 import { env } from '../config/env'
 import { validateSession, extractSessionCookie, serializeSessionCookie } from '../middleware/session'
 import { validateFileSize, validateFileType } from '../utils/validation'
+import type { CVUploadRequest, CVCustomizeRequest, ParsedCV } from '../types'
 
 const storage = new StorageService()
 
 export function registerCvRoutes() {
   return new Elysia({ name: 'cv-routes' })
     .post('/api/cv/upload', async ({ body, set }) => {
-      const file = (body as any).file as File
-      const clientId = (body as any).clientId as string | undefined
+      const { file, clientId } = body as CVUploadRequest
       if (!file) {
         set.status = 400
         return { success: false, error: 'No file provided' }
@@ -53,7 +53,7 @@ export function registerCvRoutes() {
       body: t.Object({ file: t.File(), clientId: t.Optional(t.String()) })
     })
     .post('/api/cv/import/hh/:id', async ({ params, request, set }) => {
-      const id = (params as any).id as string
+      const { id } = params as { id: string }
       const cookieValue = extractSessionCookie(request.headers.get('cookie'))
       const sessionValidation = await validateSession(cookieValue)
 
@@ -114,7 +114,7 @@ export function registerCvRoutes() {
     })
     .post('/api/cv/customize', async ({ body, set }) => {
       try {
-        const { cv, jobDescription, model } = body as { cv: any; jobDescription: string; model?: string }
+        const { cv, jobDescription, model } = body as CVCustomizeRequest
         if (!cv || !jobDescription) {
           set.status = 400
           return { success: false, error: 'Missing CV or job description' }
