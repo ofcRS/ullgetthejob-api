@@ -3,9 +3,13 @@ import { authMiddleware } from '../middleware/auth'
 import { validateEmail, validateRussianPhone } from '../utils/validation'
 import { proxyToCore } from '../services/core.proxy'
 import { logger } from '../utils/logger'
+import { ApplicationTrackerService } from '../services/application-tracker.service'
+import { db } from '../db/client'
 import type { ApplicationSubmitRequest, CustomizedCV } from '../types'
 
 export function registerApplicationRoutes() {
+  const appTracker = new ApplicationTrackerService(db)
+
   return new Elysia({ name: 'application-routes' })
     .use(authMiddleware())
     .post('/api/application/submit', async ({ body, set, userId, session }) => {
@@ -143,6 +147,69 @@ export function registerApplicationRoutes() {
         }),
         coverLetter: t.String({ minLength: 1 })
       })
+    })
+
+    // Get all applications for user
+    .get('/api/application', async ({ query, userId, set }) => {
+      const { status, limit = '50' } = query
+
+      try {
+        const applications = await appTracker.getApplications(userId, {
+          status,
+          limit: parseInt(limit)
+        })
+
+        return {
+          success: true,
+          applications,
+          total: applications.length
+        }
+      } catch (error) {
+        set.status = 500
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to fetch applications'
+        }
+      }
+    }, {
+      query: t.Object({
+        status: t.Optional(t.String()),
+        limit: t.Optional(t.String())
+      })
+    })
+
+    // Get application statistics
+    .get('/api/application/stats', async ({ userId, set }) => {
+      try {
+        const stats = await appTracker.getStats(userId)
+        return {
+          success: true,
+          stats
+        }
+      } catch (error) {
+        set.status = 500
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to fetch stats'
+        }
+      }
+    })
+
+    // Retry failed application
+    .post('/api/application/:id/retry', async ({ params, set }) => {
+      try {
+        await appTracker.retryApplication(params.id)
+        return {
+          success: true,
+          message: 'Application retry scheduled'
+        }
+      } catch (error) {
+        set.status = 500
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to retry application'
+        }
+      }
     })
 }
 
