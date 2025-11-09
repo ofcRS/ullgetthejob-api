@@ -9,6 +9,8 @@ import { registerJobRoutes } from './routes/job.routes'
 import { registerApplicationRoutes } from './routes/application.routes'
 import { registerWsRoutes } from './routes/ws.routes'
 import { registerAuthRoutes } from './routes/auth.routes'
+import { registerQueueRoutes } from './routes/queue.routes'
+import { registerRateLimitRoutes } from './routes/rate-limit.routes'
 
 export const app = new Elysia()
   .use(cors({
@@ -32,6 +34,8 @@ export const app = new Elysia()
   .use(registerJobRoutes())
   .use(registerApplicationRoutes())
   .use(registerAuthRoutes())
+  .use(registerQueueRoutes())
+  .use(registerRateLimitRoutes())
 
   // Realtime + broadcasts
   .use(registerWsRoutes())

@@ -85,4 +85,84 @@ export function registerWsRoutes() {
     })
 }
 
+/**
+ * Broadcast application progress during auto-apply
+ */
+export function broadcastApplicationProgress(
+  userId: string,
+  data: {
+    workflowId: string
+    completed: number
+    total: number
+    currentJob?: string
+  }
+) {
+  const message = JSON.stringify({
+    type: 'application_progress',
+    data
+  })
+
+  realtime.broadcast({ type: 'application_progress', ...data })
+}
+
+/**
+ * Broadcast rate limit updates
+ */
+export function broadcastRateLimitUpdate(
+  userId: string,
+  data: {
+    tokens: number
+    capacity: number
+    nextRefill: string
+    canApply: boolean
+  }
+) {
+  const message = JSON.stringify({
+    type: 'rate_limit_update',
+    data
+  })
+
+  realtime.broadcast({ type: 'rate_limit_update', ...data })
+}
+
+/**
+ * Broadcast application completed
+ */
+export function broadcastApplicationCompleted(
+  userId: string,
+  data: {
+    jobTitle: string
+    company: string
+    status: 'success' | 'failed'
+    errorMessage?: string
+  }
+) {
+  const message = JSON.stringify({
+    type: 'application_completed',
+    data
+  })
+
+  realtime.broadcast({ type: 'application_completed', ...data })
+}
+
+/**
+ * Broadcast batch customization progress
+ */
+export function broadcastCustomizationProgress(
+  userId: string,
+  data: {
+    workflowId: string
+    completed: number
+    total: number
+    currentJob?: string
+  }
+) {
+  const message = JSON.stringify({
+    type: 'customization_progress',
+    data
+  })
+
+  realtime.broadcast({ type: 'customization_progress', ...data })
+}
+
 
