@@ -3,6 +3,8 @@ import { applicationQueue, jobs, customCvs } from '../db/schema'
 import { eq, and, inArray } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 import { env } from '../config/env'
+import { matchingService } from './matching.service'
+import { logger } from '../utils/logger'
 import type { ParsedCV, JobItem } from '../types'
 
 export class QueueService {
@@ -224,8 +226,37 @@ export class QueueService {
 
   /**
    * Calculate match score between CV and job
+   * Uses enhanced semantic matching with fallback to basic keyword matching
    */
   async calculateMatchScore(cv: ParsedCV, job: JobItem): Promise<number> {
+    try {
+      // Try enhanced semantic matching
+      const result = await matchingService.calculateEnhancedMatchScore(cv, job)
+
+      logger.debug('Enhanced match score calculated', {
+        cvId: cv.id,
+        jobId: job.id,
+        score: result.totalScore,
+        confidence: result.confidence
+      })
+
+      return result.totalScore
+    } catch (error) {
+      // Fallback to basic keyword matching if enhanced matching fails
+      logger.warn('Enhanced matching failed, using basic keyword matching', {
+        cvId: cv.id,
+        jobId: job.id,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      })
+
+      return this.calculateBasicMatchScore(cv, job)
+    }
+  }
+
+  /**
+   * Legacy keyword matching (fallback only)
+   */
+  private calculateBasicMatchScore(cv: ParsedCV, job: JobItem): number {
     const cvSkills = new Set((cv.skills || []).map(s => s.toLowerCase()))
     const jobSkills = new Set((job.skills || []).map(s => s.toLowerCase()))
 

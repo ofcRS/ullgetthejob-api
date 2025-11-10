@@ -38,6 +38,12 @@ export const jobs = pgTable('jobs', {
   testRequired: boolean('test_required').default(false).notNull(),
   employerId: varchar('employer_id', { length: 255 }),
   skills: varchar('skills').array().default([]),
+
+  // Vector embeddings for semantic search
+  embedding: text('embedding'), // pgvector type - stored as text, cast in queries
+  embeddingModel: varchar('embedding_model', { length: 50 }),
+  embeddingGeneratedAt: timestamp('embedding_generated_at'),
+
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow()
 })
@@ -109,6 +115,11 @@ export const parsedCvs = pgTable('parsed_cvs', {
   originalFilename: varchar('original_filename', { length: 255 }),
   filePath: text('file_path'),
   modelUsed: varchar('model_used', { length: 100 }),
+
+  // Vector embeddings for semantic search
+  embedding: text('embedding'), // pgvector type - stored as text, cast in queries
+  embeddingModel: varchar('embedding_model', { length: 50 }),
+  embeddingGeneratedAt: timestamp('embedding_generated_at'),
 
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow()
