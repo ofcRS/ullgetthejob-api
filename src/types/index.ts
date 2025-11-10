@@ -489,3 +489,128 @@ export interface WorkflowProgress {
   currentJob?: string
   estimatedCompletion?: string
 }
+
+// ============================================================================
+// Enhanced AI Service Types
+// ============================================================================
+
+export interface CVAnalysisStage {
+  strengths: string[]
+  weaknesses: string[]
+  relevanceScore: number
+  missingKeywords: string[]
+  suggestions: string[]
+}
+
+export interface CVOptimizationStage {
+  customizedCV: CustomizedCV
+  changesApplied: string[]
+  metricsAdded: number
+}
+
+export interface CVValidationStage {
+  isValid: boolean
+  errors: string[]
+  warnings: string[]
+  qualityScore: number
+}
+
+export interface MultiStageCustomizationResult {
+  analysis: CVAnalysisStage
+  optimization: CVOptimizationStage
+  validation: CVValidationStage
+  finalCV: CustomizedCV
+  coverLetterVariations: string[]
+}
+
+export interface CoverLetterVariation {
+  id: string
+  style: 'professional' | 'enthusiastic' | 'technical' | 'creative' | 'concise'
+  content: string
+  wordCount: number
+}
+
+export interface ModelConsensusResult<T> {
+  consensus: T
+  confidence: number
+  modelResponses: Array<{
+    model: string
+    response: T
+    weight: number
+  }>
+  disagreements: string[]
+}
+
+export interface STARResponse {
+  situation: string
+  task: string
+  action: string
+  result: string
+  fullResponse: string
+}
+
+export interface InterviewPreparation {
+  commonQuestions: Array<{
+    question: string
+    starResponse: STARResponse
+    tips: string[]
+  }>
+  technicalQuestions: Array<{
+    topic: string
+    question: string
+    answer: string
+    followUp: string[]
+  }>
+  behavioralQuestions: Array<{
+    question: string
+    starResponse: STARResponse
+  }>
+  companySpecificQuestions: string[]
+}
+
+export interface CultureRedFlag {
+  category: 'work-life-balance' | 'management' | 'compensation' | 'growth' | 'values' | 'stability'
+  severity: 'low' | 'medium' | 'high' | 'critical'
+  indicator: string
+  explanation: string
+  evidence: string
+}
+
+export interface CultureAnalysis {
+  overallScore: number // 0-100
+  positiveSignals: string[]
+  redFlags: CultureRedFlag[]
+  workLifeBalance: {
+    score: number
+    indicators: string[]
+  }
+  growthOpportunities: {
+    score: number
+    indicators: string[]
+  }
+  managementQuality: {
+    score: number
+    indicators: string[]
+  }
+  compensationFairness: {
+    score: number
+    indicators: string[]
+  }
+  recommendation: 'strongly-recommended' | 'recommended' | 'proceed-with-caution' | 'not-recommended'
+  reasoning: string
+}
+
+export interface AIJobSuggestion {
+  type: 'cv-improvement' | 'cover-letter-tip' | 'skill-highlight' | 'application-timing' | 'follow-up'
+  priority: 'high' | 'medium' | 'low'
+  message: string
+  actionable: boolean
+  action?: string
+}
+
+export interface RealtimeAISuggestions {
+  jobId: string
+  suggestions: AIJobSuggestion[]
+  matchScore: number
+  estimatedApplicationTime: string
+}

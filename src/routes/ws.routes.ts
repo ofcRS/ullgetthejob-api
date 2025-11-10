@@ -42,10 +42,13 @@ export function registerWsRoutes() {
         try {
           const data = JSON.parse(String(message)) as { type?: string; searchParams?: any; clientId?: string }
           if (data.type === 'register' && data.clientId) {
-            realtime.registerClient(data.clientId, ws.raw)
+            // Register client with userId for targeted messages
+            realtime.registerClient(data.clientId, ws.raw, ws.data.userId)
             ws.send(JSON.stringify({ type: 'registered', clientId: data.clientId }))
           } else if (data.type === 'subscribe' && data.searchParams) {
             ws.send(JSON.stringify({ type: 'subscribed', searchParams: data.searchParams }))
+          } else if (data.type === 'ping') {
+            ws.send(JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() }))
           } else {
             ws.send(JSON.stringify({ type: 'echo', message }))
           }
@@ -82,6 +85,12 @@ export function registerWsRoutes() {
         }), { default: [] }),
         stats: t.Optional(t.Record(t.String(), t.Unknown()))
       })
+    })
+    .get('/api/ws/stats', () => {
+      return {
+        success: true,
+        ...realtime.getStats()
+      }
     })
 }
 

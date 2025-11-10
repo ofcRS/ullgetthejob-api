@@ -11,6 +11,7 @@ import { registerWsRoutes } from './routes/ws.routes'
 import { registerAuthRoutes } from './routes/auth.routes'
 import { registerQueueRoutes } from './routes/queue.routes'
 import { registerRateLimitRoutes } from './routes/rate-limit.routes'
+import { registerEnhancedAIRoutes } from './routes/ai-enhanced.routes'
 
 export const app = new Elysia()
   .use(cors({
@@ -36,6 +37,9 @@ export const app = new Elysia()
   .use(registerAuthRoutes())
   .use(registerQueueRoutes())
   .use(registerRateLimitRoutes())
+
+  // Enhanced AI features
+  .use(registerEnhancedAIRoutes())
 
   // Realtime + broadcasts
   .use(registerWsRoutes())
