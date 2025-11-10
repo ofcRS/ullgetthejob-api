@@ -42,9 +42,8 @@ export class CVParserService {
   }
 
   private async extractPDFText(buffer: ArrayBuffer): Promise<string> {
-    const { PDFParse } = await import("pdf-parse");
-    const parser = new PDFParse({data: buffer});
-    const data = await parser.getText();
+    const pdfParse = (await import("pdf-parse")).default;
+    const data = await pdfParse(Buffer.from(buffer));
     return data.text;
   }
 
