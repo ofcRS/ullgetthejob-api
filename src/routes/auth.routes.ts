@@ -25,9 +25,12 @@ export function registerAuthRoutes() {
     })
     .get('/api/auth/hh/callback', async ({ query, request, set }) => {
       const { code } = query as OAuthCallbackQuery
+      const frontendUrl = env.ALLOWED_ORIGINS[0] || 'http://localhost:5173'
+
       if (!code) {
-        set.status = 400
-        return { success: false, error: 'Missing code' }
+        set.status = 302
+        set.headers['Location'] = `${frontendUrl}/upload?error=missing_code`
+        return
       }
 
       const existingCookieValue = extractSessionCookie(request.headers.get('cookie'))
@@ -73,8 +76,10 @@ export function registerAuthRoutes() {
           sameSite: 'lax'
         })
 
-        data.connected = true
-        data.session_id = session.id
+        logger.info('OAuth callback successful, redirecting to frontend', { sessionId })
+        set.status = 302
+        set.headers['Location'] = `${frontendUrl}/upload?hh_connected=true`
+        return
       } else if (res.status === 401 || res.status === 403) {
         set.headers['Set-Cookie'] = serializeSessionCookie('', {
           maxAge: 0,
@@ -82,9 +87,16 @@ export function registerAuthRoutes() {
           httpOnly: true,
           sameSite: 'lax'
         })
+
+        logger.error('OAuth callback failed - unauthorized', undefined, { sessionId, status: res.status })
+        set.status = 302
+        set.headers['Location'] = `${frontendUrl}/upload?error=unauthorized`
+        return
       }
 
-      return data
+      logger.error('OAuth callback failed', undefined, { sessionId, error: data.error })
+      set.status = 302
+      set.headers['Location'] = `${frontendUrl}/upload?error=${encodeURIComponent(data.error || 'connection_failed')}`
     })
     .get('/api/auth/hh/status', async ({ request, set }) => {
       const cookieValue = extractSessionCookie(request.headers.get('cookie'))
