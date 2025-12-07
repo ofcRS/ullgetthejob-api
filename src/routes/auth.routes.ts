@@ -68,9 +68,9 @@ export function registerAuthRoutes() {
           ttlMs
         })
 
-        // Persist session to database with session_id as user_id
+        // Persist session to database (user_id null for MVP - no user management yet)
         const expiresAt = new Date(session.exp)
-        await createSessionInDb(sessionId, data.jwt, expiresAt, sessionId)
+        await createSessionInDb(sessionId, data.jwt, expiresAt, null)
 
         const maxAge = Math.max(Math.floor((session.exp - Date.now()) / 1000), 60)
         set.headers['Set-Cookie'] = serializeSessionCookie(value, {
