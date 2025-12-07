@@ -1,7 +1,7 @@
 import { Elysia } from 'elysia'
 import { randomUUID } from 'node:crypto'
 import { env } from '../config/env'
-import { createSession, validateSession, extractSessionCookie, serializeSessionCookie } from '../middleware/session'
+import { createSession, validateSession, extractSessionCookie, serializeSessionCookie, createSessionInDb } from '../middleware/session'
 import { proxyToCore } from '../services/core.proxy'
 import { logger } from '../utils/logger'
 import type { OAuthCallbackQuery, OAuthCallbackResponse } from '../types'
@@ -68,6 +68,10 @@ export function registerAuthRoutes() {
           ttlMs
         })
 
+        // Persist session to database with session_id as user_id
+        const expiresAt = new Date(session.exp)
+        await createSessionInDb(sessionId, data.jwt, expiresAt, sessionId)
+
         const maxAge = Math.max(Math.floor((session.exp - Date.now()) / 1000), 60)
         set.headers['Set-Cookie'] = serializeSessionCookie(value, {
           maxAge: Math.min(maxAge, SESSION_MAX_AGE_SECONDS),
@@ -76,7 +80,7 @@ export function registerAuthRoutes() {
           sameSite: 'lax'
         })
 
-        logger.info('OAuth callback successful, redirecting to frontend', { sessionId })
+        logger.info('OAuth callback successful, session persisted to database', { sessionId })
         set.status = 302
         set.headers['Location'] = `${frontendUrl}/upload?hh_connected=true`
         return
